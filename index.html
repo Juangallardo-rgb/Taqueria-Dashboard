@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Taqueria Dashboard</title>
+
+<style>
+body {
+  margin: 0;
+  font-family: 'Segoe UI', sans-serif;
+  display: flex;
+  background: #0f172a;
+  color: white;
+}
+
+/* SIDEBAR */
+.sidebar {
+  width: 250px;
+  background: #020617;
+  padding: 20px;
+  height: 100vh;
+}
+
+.sidebar h2 {
+  margin-bottom: 20px;
+}
+
+.sidebar button {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: #1e293b;
+  border: none;
+  color: white;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.sidebar button:hover {
+  background: #334155;
+}
+
+/* MAIN */
+.main {
+  flex: 1;
+  padding: 20px;
+}
+
+.header {
+  font-size: 24px;
+  margin-bottom: 20px;
+}
+
+/* GRID */
+#contenedor {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 15px;
+}
+
+/* CARD */
+.card {
+  background: #1e293b;
+  padding: 15px;
+  border-radius: 12px;
+}
+
+/* STATUS */
+.status {
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.processing { background: orange; }
+.completed { background: green; }
+.pendiente { background: gray; }
+
+/* FORM */
+input, textarea, select {
+  width: 100%;
+  padding: 10px;
+  margin: 5px 0;
+  border-radius: 8px;
+  border: none;
+}
+
+button.action {
+  margin-top: 5px;
+  background: #22c55e;
+  border: none;
+  padding: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button.delete {
+  background: red;
+}
+
+button.edit {
+  background: #3b82f6;
+  margin-bottom: 5px;
+}
+</style>
+</head>
+
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <h2>🌮 Taqueria</h2>
+
+  <button onclick="verPedidos()">📦 Pedidos</button>
+  <button onclick="verProductos()">🛒 Productos</button>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <div class="header">
+    👋 Welcome to Taqueria La Bonita
+  </div>
+
+  <!-- FORM PRODUCTO -->
+  <div id="formProducto" style="display:none;">
+    <h3>➕ Crear / Editar Producto</h3>
+
+    <input id="nombre" placeholder="Nombre">
+    <input id="precio" placeholder="Precio">
+    <input id="sku" placeholder="SKU">
+
+    <textarea id="descripcion" placeholder="Descripción"></textarea>
+
+    <select id="categoria"></select>
+
+    <button class="action" onclick="guardarProducto()">Guardar</button>
+  </div>
+
+  <div id="contenedor"></div>
+
+</div>
+
+<script>
+
+let pedidosGlobal = [];
+let productosGlobal = [];
+let productoEditando = null;
+
+// =======================
+// PEDIDOS
+// =======================
+async function verPedidos() {
+
+  document.getElementById('formProducto').style.display = 'none';
+
+  const res = await fetch('http://localhost:4000/orders-complete');
+  pedidosGlobal = await res.json();
+
+  const contenedor = document.getElementById('contenedor');
+  contenedor.innerHTML = '';
+
+  pedidosGlobal.forEach(p => {
+    const div = document.createElement('div');
+    div.classList.add('card');
+
+    div.innerHTML = `
+      <h3>Pedido #${p.id}</h3>
+      <p>👤 ${p.cliente}</p>
+      <p>💰 $${p.total}</p>
+
+      <span class="status ${p.estado}">
+        ${p.estado}
+      </span>
+    `;
+
+    contenedor.appendChild(div);
+  });
+}
+
+// =======================
+// CATEGORÍAS
+// =======================
+async function cargarCategorias() {
+  const res = await fetch('http://localhost:4000/categories');
+  const data = await res.json();
+
+  const select = document.getElementById('categoria');
+  select.innerHTML = '';
+
+  data.forEach(cat => {
+    const option = document.createElement('option');
+    option.value = cat.id;
+    option.textContent = cat.name;
+    select.appendChild(option);
+  });
+}
+
+// =======================
+// PRODUCTOS
+// =======================
+async function verProductos() {
+
+  document.getElementById('formProducto').style.display = 'block';
+
+  await cargarCategorias();
+
+  const res = await fetch('http://localhost:4000/products');
+  productosGlobal = await res.json();
+
+  const contenedor = document.getElementById('contenedor');
+  contenedor.innerHTML = '';
+
+  productosGlobal.forEach(p => {
+    const div = document.createElement('div');
+    div.classList.add('card');
+
+    div.innerHTML = `
+      <h3>${p.name}</h3>
+      <p>$${p.price}</p>
+
+      <button class="edit" onclick="editarProducto(${p.id})">
+        ✏️ Editar
+      </button>
+
+      <button class="delete" onclick="eliminarProducto(${p.id})">
+        ❌ Eliminar
+      </button>
+    `;
+
+    contenedor.appendChild(div);
+  });
+}
+
+// =======================
+// EDITAR PRODUCTO
+// =======================
+function editarProducto(id) {
+
+  const producto = productosGlobal.find(p => p.id === id);
+
+  productoEditando = producto.id;
+
+  document.getElementById('nombre').value = producto.name;
+  document.getElementById('precio').value = producto.price;
+  document.getElementById('sku').value = producto.sku || '';
+  document.getElementById('descripcion').value = producto.description || '';
+
+  if (producto.categories.length > 0) {
+    document.getElementById('categoria').value = producto.categories[0].id;
+  }
+}
+
+// =======================
+// GUARDAR (CREAR + EDITAR)
+// =======================
+async function guardarProducto() {
+
+  const nombre = document.getElementById('nombre').value;
+  const precio = document.getElementById('precio').value;
+  const sku = document.getElementById('sku').value;
+  const descripcion = document.getElementById('descripcion').value;
+  const categoria = document.getElementById('categoria').value;
+
+  const data = {
+    name: nombre,
+    type: "simple",
+    regular_price: precio,
+    sku: sku,
+    description: descripcion,
+    categories: [{ id: parseInt(categoria) }]
+  };
+
+  if (productoEditando) {
+
+    await fetch(`http://localhost:4000/products/${productoEditando}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+
+    alert("Producto actualizado 🔥");
+
+  } else {
+
+    await fetch('http://localhost:4000/products', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+
+    alert("Producto creado 🔥");
+  }
+
+  productoEditando = null;
+
+  document.getElementById('nombre').value = '';
+  document.getElementById('precio').value = '';
+  document.getElementById('sku').value = '';
+  document.getElementById('descripcion').value = '';
+
+  verProductos();
+}
+
+// =======================
+// ELIMINAR
+// =======================
+async function eliminarProducto(id) {
+
+  await fetch(`http://localhost:4000/products/${id}`, {
+    method: 'DELETE'
+  });
+
+  alert("Producto eliminado ❌");
+
+  verProductos();
+}
+
+// =======================
+// INICIO
+// =======================
+verPedidos();
+
+</script>
+
+</body>
+</html>
