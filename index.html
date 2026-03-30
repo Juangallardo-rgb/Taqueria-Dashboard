@@ -154,7 +154,7 @@ async function verPedidos() {
 
   document.getElementById('formProducto').style.display = 'none';
 
-  const res = await fetch('http://localhost:4000/orders-complete');
+  const res = await fetch('https://taqueria-dashboard.onrender.com');
   pedidosGlobal = await res.json();
 
   const contenedor = document.getElementById('contenedor');
@@ -182,7 +182,7 @@ async function verPedidos() {
 // CATEGORÍAS
 // =======================
 async function cargarCategorias() {
-  const res = await fetch('http://localhost:4000/categories');
+  const res = await fetch('https://taqueria-dashboard.onrender.com/categories');
   const data = await res.json();
 
   const select = document.getElementById('categoria');
@@ -205,7 +205,7 @@ async function verProductos() {
 
   await cargarCategorias();
 
-  const res = await fetch('http://localhost:4000/products');
+  const res = await fetch('https://taqueria-dashboard.onrender.com/products');
   productosGlobal = await res.json();
 
   const contenedor = document.getElementById('contenedor');
@@ -273,7 +273,7 @@ async function guardarProducto() {
 
   if (productoEditando) {
 
-    await fetch(`http://localhost:4000/products/${productoEditando}`, {
+    await fetch(`https://taqueria-dashboard.onrender.com:4000/products/${productoEditando}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -283,7 +283,7 @@ async function guardarProducto() {
 
   } else {
 
-    await fetch('http://localhost:4000/products', {
+    await fetch('https://taqueria-dashboard.onrender.com/products', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -307,7 +307,7 @@ async function guardarProducto() {
 // =======================
 async function eliminarProducto(id) {
 
-  await fetch(`http://localhost:4000/products/${id}`, {
+  await fetch(`https://taqueria-dashboard.onrender.com/products/${id}`, {
     method: 'DELETE'
   });
 
