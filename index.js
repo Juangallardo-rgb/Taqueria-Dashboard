@@ -21,7 +21,7 @@ let shipdayOrders = [];
 
 // 🏠 HOME
 app.get('/', (req, res) => {
-  res.send('Servidor funcionando 🚀');
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // 🖥️ DASHBOARD
