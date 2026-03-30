@@ -273,8 +273,7 @@ async function guardarProducto() {
 
   if (productoEditando) {
 
-    await fetch(`https://taqueria-dashboard.onrender.com:4000/products/${productoEditando}`, {
-      method: 'PUT',
+    await fetch(`https://taqueria-dashboard.onrender.com/products/${productoEditando}`, {      method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
