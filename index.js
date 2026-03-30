@@ -8,7 +8,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const PORT = 4000;
+const PORT = process.env.PORT || 4000;
 
 // 🔐 CLAVES (modo desarrollo)
 const WOO_URL = 'https://user.taquerialabonita.com';
