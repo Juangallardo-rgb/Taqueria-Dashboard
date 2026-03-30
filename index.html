@@ -279,7 +279,13 @@ async function guardarProducto() {
     });
 
     alert("Producto actualizado 🔥");
+// 🔥 ACTUALIZAR UI INMEDIATO
+const index = productosGlobal.findIndex(p => p.id === productoEditando);
 
+if (index !== -1) {
+  productosGlobal[index].name = nombre;
+  productosGlobal[index].price = precio;
+}
   } else {
 
     await fetch('https://taqueria-dashboard.onrender.com/products', {
@@ -298,7 +304,9 @@ async function guardarProducto() {
   document.getElementById('sku').value = '';
   document.getElementById('descripcion').value = '';
 
+  setTimeout(() => {
   verProductos();
+}, 1000);
 }
 
 // =======================
