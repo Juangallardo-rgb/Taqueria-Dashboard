@@ -119,7 +119,7 @@ button.edit {
 <div class="main">
 
   <div class="header">
-    👋 Welcome to Taqueria La Bonita
+  Welcome to Taqueria La Bonita
   </div>
 
   <!-- FORM PRODUCTO -->
@@ -154,7 +154,7 @@ async function verPedidos() {
 
   document.getElementById('formProducto').style.display = 'none';
 
-  const res = await fetch('https://taqueria-dashboard.onrender.com');
+  const res = await fetch('https://taqueria-dashboard.onrender.com/orders-complete');
   pedidosGlobal = await res.json();
 
   const contenedor = document.getElementById('contenedor');
