@@ -1,5 +1,5 @@
-import 'dotenv/config';
-import pool from './db.js'; // 👈 AGREGA ESTO
+require('dotenv').config();
+const pool = require('./db');
 
 const axios = require('axios');
 const express = require('express');
