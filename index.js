@@ -1,3 +1,6 @@
+import 'dotenv/config';
+import pool from './db.js'; // 👈 AGREGA ESTO
+
 const axios = require('axios');
 const express = require('express');
 const cors = require('cors');
@@ -260,4 +263,14 @@ app.get('/categories', async (req, res) => {
 // 🚀 START
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);
+});
+
+app.get('/test-db', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT NOW()');
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Error conexión DB');
+  }
 });
