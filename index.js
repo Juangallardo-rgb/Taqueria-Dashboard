@@ -273,8 +273,8 @@ app.get('/pedidos-db', async (req, res) => {
     res.json(result.rows);
 
   } catch (error) {
-    console.error(error);
-    res.status(500).send('Error obteniendo pedidos');
+    console.error("ERROR REAL:", error);
+    res.status(500).send(error.message); // 👈 IMPORTANTE
   }
 });
 
