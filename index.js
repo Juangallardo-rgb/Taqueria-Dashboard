@@ -77,11 +77,13 @@ app.post('/webhook-order', async (req, res) => {
       `INSERT INTO pedidos (restaurante_id, total, estado)
        VALUES ($1, $2, $3)`,
       [
-        1, // luego será dinámico (multi cliente)
+        1, // luego será dinámico
         order.total,
         order.status
       ]
     );
+
+    console.log("✅ Pedido guardado en DB");
 
     res.sendStatus(200);
 
@@ -90,7 +92,6 @@ app.post('/webhook-order', async (req, res) => {
     res.sendStatus(500);
   }
 });
-
 
 // ===============================
 // 🚚 WEBHOOK SHIPDAY
