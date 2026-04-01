@@ -69,21 +69,26 @@ app.get('/woo-orders', async (req, res) => {
 // ===============================
 // 🔥 WEBHOOK WOO
 // ===============================
-app.post('/webhook-order', (req, res) => {
-  console.log("🔥 WEBHOOK WOO:", req.body);
-
+app.post('/webhook-order', async (req, res) => {
   const order = req.body;
 
-  wooOrders.push({
-    id: order.id,
-    total: order.total,
-    estado: order.status,
-    cliente: order.billing?.first_name + " " + order.billing?.last_name,
-    direccion: order.shipping?.address_1,
-    ciudad: order.shipping?.city
-  });
+  try {
+    await pool.query(
+      `INSERT INTO pedidos (restaurante_id, total, estado)
+       VALUES ($1, $2, $3)`,
+      [
+        1, // luego será dinámico (multi cliente)
+        order.total,
+        order.status
+      ]
+    );
 
-  res.sendStatus(200);
+    res.sendStatus(200);
+
+  } catch (error) {
+    console.error("DB ERROR:", error);
+    res.sendStatus(500);
+  }
 });
 
 
@@ -257,6 +262,19 @@ app.get('/categories', async (req, res) => {
   } catch (error) {
     console.error(error.response?.data || error.message);
     res.status(500).send('Error categorias');
+  }
+});
+app.get('/pedidos-db', async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT * FROM pedidos ORDER BY created_at DESC"
+    );
+
+    res.json(result.rows);
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Error obteniendo pedidos');
   }
 });
 
