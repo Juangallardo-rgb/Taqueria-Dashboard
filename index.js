@@ -1,5 +1,5 @@
 require('dotenv').config();
-const pool = require('./db');
+const pool = require('./database');
 
 const axios = require('axios');
 const express = require('express');
