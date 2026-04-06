@@ -71,18 +71,18 @@ app.get('/woo-orders', async (req, res) => {
 app.post('/webhook-order', async (req, res) => {
   const order = req.body;
 
+  console.log("🔥 WOO DATA:", order); // DEBUG
+
   try {
     await pool.query(
       `INSERT INTO pedidos (restaurante_id, total, estado)
        VALUES ($1, $2, $3)`,
       [
-        1, // luego será dinámico
-        order.total,
-        order.status
+        1,
+        order.total || order.line_items?.[0]?.total || 0,
+        order.status || "pending"
       ]
     );
-
-    console.log("✅ Pedido guardado en DB");
 
     res.sendStatus(200);
 
