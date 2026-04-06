@@ -75,14 +75,15 @@ app.post('/webhook-order', async (req, res) => {
 
   try {
     await pool.query(
-      `INSERT INTO pedidos (restaurante_id, total, estado)
-       VALUES ($1, $2, $3)`,
-      [
-        1,
-        order.total || order.line_items?.[0]?.total || 0,
-        order.status || "pending"
-      ]
-    );
+  `INSERT INTO pedidos (restaurante_id, total, estado, woo_order_id)
+   VALUES ($1, $2, $3, $4)`,
+  [
+    1,
+    order.total,
+    order.status,
+    order.id // 🔥 CLAVE
+  ]
+);
 
     res.sendStatus(200);
 
