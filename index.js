@@ -96,6 +96,10 @@ app.post('/webhook-order', async (req, res) => {
 // 🚚 WEBHOOK SHIPDAY
 // ===============================
 app.post('/webhook-shipday', async (req, res) => {
+
+  console.log("🔥🔥 HEADERS:", req.headers);
+  console.log("🔥🔥 BODY RAW:", req.body);
+
   const data = req.body;
 
   try {
@@ -103,7 +107,7 @@ app.post('/webhook-shipday', async (req, res) => {
       `INSERT INTO deliveries 
       (order_number, driver_name, status, delivery_cost, tracking_url, picked_up_at, delivered_at)
       VALUES ($1,$2,$3,$4,$5,$6,$7)
-      ON CONFLICT (order_number) 
+      ON CONFLICT (order_number)
       DO UPDATE SET
         driver_name = EXCLUDED.driver_name,
         status = EXCLUDED.status,
@@ -112,20 +116,22 @@ app.post('/webhook-shipday', async (req, res) => {
         picked_up_at = EXCLUDED.picked_up_at,
         delivered_at = EXCLUDED.delivered_at`,
       [
-        data.orderNumber,
-        data.driverName,
-        data.status,
-        data.totalCost,
-        data.trackingUrl,
+        data.orderNumber || "UNKNOWN",
+        data.driverName || null,
+        data.status || null,
+        data.totalCost || 0,
+        data.trackingUrl || null,
         data.pickupTime || null,
         data.deliveredTime || null
       ]
     );
 
+    console.log("✅ GUARDADO SHIPDAY");
+
     res.sendStatus(200);
 
   } catch (error) {
-    console.error("SHIPDAY DB ERROR:", error);
+    console.error("❌ ERROR SHIPDAY:", error);
     res.sendStatus(500);
   }
 });
