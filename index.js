@@ -12,11 +12,10 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 const PORT = process.env.PORT || 4000;
-
 // 🔐 CLAVES (modo desarrollo)
-const WOO_URL = 'https://user.taquerialabonita.com';
-const CONSUMER_KEY = 'ck_1f0e1358b2b92f6d1c2556b065ee7fde816db5e4';
-const CONSUMER_SECRET = 'cs_6254e435ed2161cdaa7cb6baedb9b885995965f6';
+const WOO_URL = 'https://taquerialabonita.com';
+const CONSUMER_KEY = 'ck_09ccb2842a83e1b4d089505baecb6c627a8cab1c';
+const CONSUMER_SECRET = 'cs_f0a533f8a25ec307a44126e421e2088b0b27f57a';
 
 // 🧠 MEMORIA
 let wooOrders = [];
@@ -96,21 +95,39 @@ app.post('/webhook-order', async (req, res) => {
 // ===============================
 // 🚚 WEBHOOK SHIPDAY
 // ===============================
-app.post('/webhook-shipday', (req, res) => {
+app.post('/webhook-shipday', async (req, res) => {
   const data = req.body;
 
-  console.log("🚚 SHIPDAY:", data.orderNumber, data.status);
+  try {
+    await pool.query(
+      `INSERT INTO deliveries 
+      (order_number, driver_name, status, delivery_cost, tracking_url, picked_up_at, delivered_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7)
+      ON CONFLICT (order_number) 
+      DO UPDATE SET
+        driver_name = EXCLUDED.driver_name,
+        status = EXCLUDED.status,
+        delivery_cost = EXCLUDED.delivery_cost,
+        tracking_url = EXCLUDED.tracking_url,
+        picked_up_at = EXCLUDED.picked_up_at,
+        delivered_at = EXCLUDED.delivered_at`,
+      [
+        data.orderNumber,
+        data.driverName,
+        data.status,
+        data.totalCost,
+        data.trackingUrl,
+        data.pickupTime || null,
+        data.deliveredTime || null
+      ]
+    );
 
-  // 🔥 EVITAR DUPLICADOS
-  const index = shipdayOrders.findIndex(s => s.orderNumber == data.orderNumber);
+    res.sendStatus(200);
 
-  if (index !== -1) {
-    shipdayOrders[index] = data; // actualizar
-  } else {
-    shipdayOrders.push(data); // nuevo
+  } catch (error) {
+    console.error("SHIPDAY DB ERROR:", error);
+    res.sendStatus(500);
   }
-
-  res.sendStatus(200);
 });
 
 
@@ -125,32 +142,33 @@ app.get('/shipday-live', (req, res) => {
 // ===============================
 // 🧩 UNIÓN FINAL
 // ===============================
-app.get('/orders-complete', (req, res) => {
+app.get('/orders-complete', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        p.id,
+        p.total,
+        p.estado,
+        p.created_at,
+        d.driver_name,
+        d.status AS estado_envio,
+        d.delivery_cost,
+        d.tracking_url,
+        d.picked_up_at,
+        d.delivered_at
+      FROM pedidos p
+      LEFT JOIN deliveries d
+      ON CAST(d.order_number AS TEXT) LIKE '%' || p.id || '%'
+      ORDER BY p.created_at DESC
+    `);
 
-  const resultado = wooOrders.map(order => {
+    res.json(result.rows);
 
-    const ship = shipdayOrders.find(s =>
-      String(s.orderNumber).includes(String(order.id))
-    );
-
-    return {
-      id: order.id,
-      cliente: order.cliente,
-      total: order.total,
-      estado: order.estado,
-      direccion: order.direccion,
-      ciudad: order.ciudad,
-
-      estado_envio: ship?.status || "pendiente",
-      driver: ship?.driverName || "no asignado",
-      tracking: ship?.trackingUrl || null
-    };
-  });
-
-  res.json(resultado);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Error join');
+  }
 });
-
-
 // ===============================
 // 🛒 PRODUCTOS (CRUD)
 // ===============================
