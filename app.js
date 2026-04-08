@@ -256,15 +256,21 @@ async function cargarEstadoRestaurante() {
   const res = await fetch('/estado-restaurante');
   const data = await res.json();
 
-  const estado = document.getElementById('estadoRestaurante');
+  const switchInput = document.getElementById('switchRestaurante');
+  const texto = document.getElementById('estadoTexto');
+
+  if (!switchInput || !texto) return;
 
   if (data.abierto) {
-    estado.innerText = "🟢 Abierto";
+    switchInput.checked = true;
+    texto.innerText = "🟢 Abierto";
   } else {
-    estado.innerText = "🔴 Cerrado";
+    switchInput.checked = false;
+    texto.innerText = "🔴 Cerrado";
   }
 
 }
+
 async function toggleRestaurante() {
 
   await fetch('/toggle-restaurante', {
