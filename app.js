@@ -40,13 +40,14 @@ function logout() {
 // =====================
 function mostrarInicio() {
 
-  document.getElementById('contenedor').innerHTML = '';
   document.getElementById('contenido').innerHTML = `
     <div class="card">
       <h2>Bienvenido a DENIX 🚀</h2>
       <p>Tu sistema inteligente de pedidos.</p>
     </div>
   `;
+
+  document.getElementById('contenedor').innerHTML = '';
 }
 
 // =====================
@@ -55,7 +56,7 @@ function mostrarInicio() {
 async function verPedidos() {
 
   document.getElementById('contenido').innerHTML = '';
-  
+
   const res = await fetch('/orders-complete');
   const data = await res.json();
 
@@ -84,6 +85,9 @@ async function cargarCategorias() {
   const data = await res.json();
 
   const select = document.getElementById('categoria');
+
+  if (!select) return;
+
   select.innerHTML = '';
 
   data.forEach(cat => {
@@ -99,20 +103,10 @@ async function cargarCategorias() {
 // =====================
 async function verProductos() {
 
-  document.getElementById('contenido').innerHTML = '';
+  const contenido = document.getElementById('contenido');
+  const contenedor = document.getElementById('contenedor');
 
-  await cargarCategorias();
-
-  const res = await fetch('/products');
-  const data = await res.json();
-
-  productosGlobal = data;
-
-  const cont = document.getElementById('contenedor');
-  cont.innerHTML = '';
-
-  // MOSTRAR FORM
-  document.getElementById('contenido').innerHTML = `
+  contenido.innerHTML = `
     <div class="card">
       <h2>Crear / Editar Producto</h2>
       <input id="nombre" placeholder="Nombre">
@@ -124,20 +118,32 @@ async function verProductos() {
     </div>
   `;
 
+  contenedor.innerHTML = '';
+
   await cargarCategorias();
 
-  // MOSTRAR PRODUCTOS
+  const res = await fetch('/products');
+  const data = await res.json();
+
+  productosGlobal = data;
+
+  if (data.length === 0) {
+    contenedor.innerHTML = "<p>No hay productos</p>";
+    return;
+  }
+
   data.forEach(p => {
-    cont.innerHTML += `
+    contenedor.innerHTML += `
       <div class="card">
         <h3>${p.name}</h3>
         <p>$${p.price}</p>
 
-        <button onclick="editarProducto(${p.id})">✏️ Editar</button>
-        <button onclick="eliminarProducto(${p.id})">❌ Eliminar</button>
+        <button onclick="editarProducto(${p.id})">Editar</button>
+        <button onclick="eliminarProducto(${p.id})">Eliminar</button>
       </div>
     `;
   });
+
 }
 
 // =====================

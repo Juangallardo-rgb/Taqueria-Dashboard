@@ -1,7 +1,12 @@
+* {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   font-family: "Segoe UI", sans-serif;
   background: #f8fafc;
+  color: #0f172a;
 }
 
 /* LOGIN */
@@ -23,24 +28,63 @@ body {
 
 .logo {
   width: 80px;
+  margin-bottom: 15px;
 }
 
-input {
+input, textarea, select {
   width: 100%;
   padding: 12px;
   margin-top: 10px;
   border-radius: 8px;
   border: 1px solid #ddd;
+  font-size: 14px;
 }
 
+/* BOTONES BASE */
 button {
-  margin-top: 15px;
-  padding: 12px;
-  width: 100%;
-  background: #f97316;
-  color: white;
-  border: none;
+  padding: 10px 12px;
   border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+/* BOTONES MENU */
+.menu button {
+  width: 100%;
+  background: #e2e8f0;
+  color: #0f172a;
+  margin-top: 10px;
+  text-align: left;
+}
+
+.menu button:hover {
+  background: #cbd5f5;
+}
+
+/* BOTON GUARDAR */
+button[onclick="guardarProducto()"] {
+  background: #22c55e;
+  color: white;
+  margin-top: 15px;
+}
+
+/* BOTONES CRUD */
+button[onclick*="editarProducto"] {
+  background: #3b82f6;
+  color: white;
+  margin-right: 5px;
+}
+
+button[onclick*="eliminarProducto"] {
+  background: #ef4444;
+  color: white;
+}
+
+/* LOGOUT */
+.logout {
+  background: #ef4444;
+  color: white;
 }
 
 /* APP */
@@ -66,21 +110,13 @@ button {
   margin: auto;
 }
 
-.menu button {
-  background: #f1f5f9;
-  margin-top: 10px;
-}
-
-.logout {
-  background: red;
-}
-
 /* MAIN */
 .main {
   flex: 1;
   padding: 25px;
 }
 
+/* TOPBAR */
 .topbar {
   display: flex;
   justify-content: space-between;
