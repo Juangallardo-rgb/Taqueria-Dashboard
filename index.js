@@ -303,6 +303,27 @@ app.get('/pedidos-db', async (req, res) => {
     res.status(500).send(error.message); // 👈 IMPORTANTE
   }
 });
+//LOGIN
+app.post('/login', async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    const result = await pool.query(
+      'SELECT * FROM usuarios WHERE email = $1 AND password = $2',
+      [email, password]
+    );
+
+    if (result.rows.length > 0) {
+      res.json({ success: true });
+    } else {
+      res.json({ success: false });
+    }
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Error login');
+  }
+});
 
 // 🚀 START
 app.listen(PORT, () => {
@@ -319,3 +340,4 @@ app.get('/test-db', async (req, res) => {
   }
 }); 
 app.use(express.static(__dirname));
+
