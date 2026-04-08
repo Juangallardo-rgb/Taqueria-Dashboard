@@ -318,3 +318,4 @@ app.get('/test-db', async (req, res) => {
     res.status(500).send('Error conexión DB');
   }
 }); 
+app.use(express.static(__dirname));
