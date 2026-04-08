@@ -1,3 +1,6 @@
+let productosGlobal = [];
+let productoEditando = null;
+
 // LOGIN
 async function login() {
 
@@ -16,7 +19,7 @@ async function login() {
     localStorage.setItem("login", "true");
     location.reload();
   } else {
-    alert("Error");
+    alert("Credenciales incorrectas");
   }
 }
 
@@ -32,8 +35,12 @@ function logout() {
   location.reload();
 }
 
+// =====================
 // INICIO
+// =====================
 function mostrarInicio() {
+
+  document.getElementById('contenedor').innerHTML = '';
   document.getElementById('contenido').innerHTML = `
     <div class="card">
       <h2>Bienvenido a DENIX 🚀</h2>
@@ -42,8 +49,13 @@ function mostrarInicio() {
   `;
 }
 
+// =====================
 // PEDIDOS
+// =====================
 async function verPedidos() {
+
+  document.getElementById('contenido').innerHTML = '';
+  
   const res = await fetch('/orders-complete');
   const data = await res.json();
 
@@ -55,7 +67,155 @@ async function verPedidos() {
       <div class="card">
         <h3>Pedido #${p.id}</h3>
         <p>$${p.total}</p>
+        <p>${p.estado}</p>
+        <p>🚚 ${p.estado_envio || "pendiente"}</p>
+        <p>👤 ${p.driver_name || "no asignado"}</p>
       </div>
     `;
   });
 }
+
+// =====================
+// CATEGORIAS
+// =====================
+async function cargarCategorias() {
+
+  const res = await fetch('/categories');
+  const data = await res.json();
+
+  const select = document.getElementById('categoria');
+  select.innerHTML = '';
+
+  data.forEach(cat => {
+    const option = document.createElement('option');
+    option.value = cat.id;
+    option.textContent = cat.name;
+    select.appendChild(option);
+  });
+}
+
+// =====================
+// PRODUCTOS
+// =====================
+async function verProductos() {
+
+  document.getElementById('contenido').innerHTML = '';
+
+  await cargarCategorias();
+
+  const res = await fetch('/products');
+  const data = await res.json();
+
+  productosGlobal = data;
+
+  const cont = document.getElementById('contenedor');
+  cont.innerHTML = '';
+
+  // MOSTRAR FORM
+  document.getElementById('contenido').innerHTML = `
+    <div class="card">
+      <h2>Crear / Editar Producto</h2>
+      <input id="nombre" placeholder="Nombre">
+      <input id="precio" placeholder="Precio">
+      <input id="sku" placeholder="SKU">
+      <textarea id="descripcion" placeholder="Descripción"></textarea>
+      <select id="categoria"></select>
+      <button onclick="guardarProducto()">Guardar</button>
+    </div>
+  `;
+
+  await cargarCategorias();
+
+  // MOSTRAR PRODUCTOS
+  data.forEach(p => {
+    cont.innerHTML += `
+      <div class="card">
+        <h3>${p.name}</h3>
+        <p>$${p.price}</p>
+
+        <button onclick="editarProducto(${p.id})">✏️ Editar</button>
+        <button onclick="eliminarProducto(${p.id})">❌ Eliminar</button>
+      </div>
+    `;
+  });
+}
+
+// =====================
+// EDITAR
+// =====================
+function editarProducto(id) {
+
+  const producto = productosGlobal.find(p => p.id === id);
+
+  productoEditando = producto.id;
+
+  document.getElementById('nombre').value = producto.name;
+  document.getElementById('precio').value = producto.price;
+  document.getElementById('sku').value = producto.sku || '';
+  document.getElementById('descripcion').value = producto.description || '';
+
+  if (producto.categories.length > 0) {
+    document.getElementById('categoria').value = producto.categories[0].id;
+  }
+}
+
+// =====================
+// GUARDAR
+// =====================
+async function guardarProducto() {
+
+  const nombre = document.getElementById('nombre').value;
+  const precio = document.getElementById('precio').value;
+  const sku = document.getElementById('sku').value;
+  const descripcion = document.getElementById('descripcion').value;
+  const categoria = document.getElementById('categoria').value;
+
+  const data = {
+    name: nombre,
+    type: "simple",
+    regular_price: precio,
+    sku: sku,
+    description: descripcion,
+    categories: [{ id: parseInt(categoria) }]
+  };
+
+  if (productoEditando) {
+
+    await fetch(`/products/${productoEditando}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+
+    alert("Producto actualizado 🔥");
+
+  } else {
+
+    await fetch('/products', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+
+    alert("Producto creado 🔥");
+  }
+
+  productoEditando = null;
+  verProductos();
+}
+
+// =====================
+// ELIMINAR
+// =====================
+async function eliminarProducto(id) {
+
+  await fetch(`/products/${id}`, {
+    method: 'DELETE'
+  });
+
+  alert("Producto eliminado ❌");
+  verProductos();
+}
+
+// INICIO
+mostrarInicio();
