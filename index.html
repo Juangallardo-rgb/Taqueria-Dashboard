@@ -5,12 +5,15 @@
 <title>DENIX</title>
 
 <style>
+* {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
-  font-family: 'Segoe UI', sans-serif;
-  background: #0f172a;
-  color: white;
-  display: flex;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto;
+  background: #f8fafc;
+  color: #0f172a;
 }
 
 /* LOGIN */
@@ -22,132 +25,159 @@ body {
 }
 
 .login-box {
-  background: #020617;
-  padding: 30px;
+  background: white;
+  padding: 40px;
   border-radius: 16px;
-  width: 320px;
+  width: 340px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.08);
   text-align: center;
 }
 
 .logo {
-  width: 80px;
+  width: 70px;
   margin-bottom: 20px;
 }
 
 input {
   width: 100%;
-  padding: 12px;
+  padding: 14px;
   margin: 10px 0;
   border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  font-size: 14px;
+}
+
+button.login-btn {
+  width: 100%;
+  padding: 14px;
+  background: #f97316;
   border: none;
-  background: #1e293b;
   color: white;
+  border-radius: 10px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+/* APP */
+.app {
+  display: flex;
 }
 
 /* SIDEBAR */
 .sidebar {
-  width: 250px;
-  background: #020617;
-  padding: 20px;
+  width: 240px;
   height: 100vh;
+  background: white;
+  border-right: 1px solid #e2e8f0;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
 .sidebar h2 {
-  margin-bottom: 20px;
+  font-size: 18px;
 }
 
-.sidebar button {
+.menu button {
   width: 100%;
   padding: 12px;
-  margin-bottom: 10px;
-  background: #1e293b;
   border: none;
-  color: white;
-  border-radius: 8px;
+  background: #f1f5f9;
+  border-radius: 10px;
+  margin-bottom: 10px;
   cursor: pointer;
+  text-align: left;
 }
 
-.sidebar button:hover {
-  background: #334155;
+.menu button:hover {
+  background: #e2e8f0;
 }
 
-/* LOGOUT */
 .logout {
-  background: red;
+  background: #ef4444;
+  color: white;
 }
 
 /* MAIN */
 .main {
   flex: 1;
-  padding: 20px;
+  padding: 30px;
 }
 
 .header {
-  font-size: 24px;
+  font-size: 22px;
   margin-bottom: 20px;
 }
 
 /* GRID */
-#contenedor {
+.grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 15px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 20px;
 }
 
 /* CARD */
 .card {
-  background: #1e293b;
-  padding: 15px;
-  border-radius: 12px;
+  background: white;
+  padding: 20px;
+  border-radius: 14px;
+  box-shadow: 0 5px 20px rgba(0,0,0,0.05);
+}
+
+.card h3 {
+  margin: 0 0 10px;
 }
 
 /* STATUS */
-.status {
+.badge {
+  display: inline-block;
   padding: 5px 10px;
   border-radius: 8px;
   font-size: 12px;
+  margin-top: 5px;
 }
 
-.processing { background: orange; }
-.completed { background: green; }
-.pendiente { background: gray; }
+.processing { background: #facc15; }
+.completed { background: #22c55e; color: white; }
+.pendiente { background: #94a3b8; color: white; }
 
 /* FORM */
-textarea, select {
-  width: 100%;
-  padding: 10px;
-  margin: 5px 0;
-  border-radius: 8px;
-  border: none;
+.form {
+  background: white;
+  padding: 20px;
+  border-radius: 14px;
+  margin-bottom: 20px;
 }
 
-button.action {
-  margin-top: 5px;
-  background: #22c55e;
-  border: none;
-  padding: 8px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-button.delete {
-  background: red;
-}
-
-button.edit {
-  background: #3b82f6;
-  margin-bottom: 5px;
-}
-
-button.login-btn {
+.form input, .form textarea, .form select {
   width: 100%;
   padding: 12px;
-  margin-top: 15px;
-  background: #f97316;
-  border: none;
+  margin: 8px 0;
   border-radius: 10px;
-  font-weight: bold;
+  border: 1px solid #e2e8f0;
+}
+
+.btn {
+  padding: 10px;
+  border-radius: 8px;
+  border: none;
   cursor: pointer;
+}
+
+.btn-save {
+  background: #22c55e;
+  color: white;
+}
+
+.btn-edit {
+  background: #3b82f6;
+  color: white;
+}
+
+.btn-delete {
+  background: #ef4444;
+  color: white;
 }
 </style>
 </head>
@@ -157,61 +187,45 @@ button.login-btn {
 <!-- LOGIN -->
 <div class="login-container" id="loginScreen">
   <div class="login-box">
-    
-    <img src="logoDenix.png" class="logo">
-
+    <img src="logo.png" class="logo">
     <h2>DENIX</h2>
-
     <input id="email" placeholder="Correo">
     <input id="password" type="password" placeholder="Contraseña">
-
     <button class="login-btn" onclick="login()">Ingresar</button>
-
   </div>
 </div>
 
-<!-- DASHBOARD -->
-<div id="dashboard" style="display:none;">
+<!-- APP -->
+<div class="app" id="dashboard" style="display:none;">
 
-  <!-- SIDEBAR -->
   <div class="sidebar">
-    
     <div>
       <h2>🌮 Taqueria</h2>
-      <button onclick="verPedidos()">📦 Pedidos</button>
-      <button onclick="verProductos()">🛒 Productos</button>
+      <div class="menu">
+        <button onclick="verPedidos()">📦 Pedidos</button>
+        <button onclick="verProductos()">🛒 Productos</button>
+      </div>
     </div>
 
-    <!-- LOGOUT ABAJO -->
-    <div>
-      <button class="logout" onclick="logout()">Cerrar sesión</button>
-    </div>
-
+    <button class="logout" onclick="logout()">Cerrar sesión</button>
   </div>
 
-  <!-- MAIN -->
   <div class="main">
 
-    <div class="header">
-      Welcome to Taqueria La Bonita
-    </div>
+    <div class="header">Dashboard</div>
 
-    <!-- FORM PRODUCTO -->
-    <div id="formProducto" style="display:none;">
-      <h3>➕ Crear / Editar Producto</h3>
-
+    <!-- FORM -->
+    <div class="form" id="formProducto" style="display:none;">
+      <h3>Crear / Editar Producto</h3>
       <input id="nombre" placeholder="Nombre">
       <input id="precio" placeholder="Precio">
       <input id="sku" placeholder="SKU">
-
       <textarea id="descripcion" placeholder="Descripción"></textarea>
-
       <select id="categoria"></select>
-
-      <button class="action" onclick="guardarProducto()">Guardar</button>
+      <button class="btn btn-save" onclick="guardarProducto()">Guardar</button>
     </div>
 
-    <div id="contenedor"></div>
+    <div class="grid" id="contenedor"></div>
 
   </div>
 
@@ -219,33 +233,22 @@ button.login-btn {
 
 <script>
 
-let pedidosGlobal = [];
-let productosGlobal = [];
-let productoEditando = null;
-
-// LOGIN
+// LOGIN REAL
 async function login() {
-
   const email = document.getElementById('email').value;
   const password = document.getElementById('password').value;
 
   const res = await fetch('https://taqueria-dashboard.onrender.com/login', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
+    headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ email, password })
   });
 
   const data = await res.json();
 
   if (data.success) {
-
     localStorage.setItem("login", "true");
-
-    document.getElementById('loginScreen').style.display = "none";
-    document.getElementById('dashboard').style.display = "block";
-
+    location.reload();
   } else {
     alert("Credenciales incorrectas");
   }
@@ -254,7 +257,7 @@ async function login() {
 // AUTO LOGIN
 if(localStorage.getItem("login") === "true") {
   document.getElementById('loginScreen').style.display = "none";
-  document.getElementById('dashboard').style.display = "block";
+  document.getElementById('dashboard').style.display = "flex";
 }
 
 // LOGOUT
@@ -263,153 +266,50 @@ function logout() {
   location.reload();
 }
 
-// =======================
 // PEDIDOS
-// =======================
 async function verPedidos() {
-
   document.getElementById('formProducto').style.display = 'none';
 
   const res = await fetch('https://taqueria-dashboard.onrender.com/orders-complete');
-  pedidosGlobal = await res.json();
-
-  const contenedor = document.getElementById('contenedor');
-  contenedor.innerHTML = '';
-
-  pedidosGlobal.forEach(p => {
-    const div = document.createElement('div');
-    div.classList.add('card');
-
-    div.innerHTML = `
-      <h3>Pedido #${p.id}</h3>
-      <p>💰 $${p.total}</p>
-
-      <span class="status ${p.estado}">
-        ${p.estado}
-      </span>
-
-      <p>🚚 ${p.estado_envio || "pendiente"}</p>
-      <p>👤 ${p.driver_name || "no asignado"}</p>
-    `;
-
-    contenedor.appendChild(div);
-  });
-}
-
-// =======================
-// CATEGORÍAS
-// =======================
-async function cargarCategorias() {
-  const res = await fetch('https://taqueria-dashboard.onrender.com/categories');
   const data = await res.json();
 
-  const select = document.getElementById('categoria');
-  select.innerHTML = '';
+  const cont = document.getElementById('contenedor');
+  cont.innerHTML = '';
 
-  data.forEach(cat => {
-    const option = document.createElement('option');
-    option.value = cat.id;
-    option.textContent = cat.name;
-    select.appendChild(option);
+  data.forEach(p => {
+    cont.innerHTML += `
+      <div class="card">
+        <h3>Pedido #${p.id}</h3>
+        <p>$${p.total}</p>
+        <span class="badge ${p.estado}">${p.estado}</span>
+        <p>🚚 ${p.estado_envio || "pendiente"}</p>
+        <p>👤 ${p.driver_name || "no asignado"}</p>
+      </div>
+    `;
   });
 }
 
-// =======================
 // PRODUCTOS
-// =======================
 async function verProductos() {
-
   document.getElementById('formProducto').style.display = 'block';
 
-  await cargarCategorias();
-
   const res = await fetch('https://taqueria-dashboard.onrender.com/products');
-  productosGlobal = await res.json();
+  const data = await res.json();
 
-  const contenedor = document.getElementById('contenedor');
-  contenedor.innerHTML = '';
+  const cont = document.getElementById('contenedor');
+  cont.innerHTML = '';
 
-  productosGlobal.forEach(p => {
-    const div = document.createElement('div');
-    div.classList.add('card');
-
-    div.innerHTML = `
-      <h3>${p.name}</h3>
-      <p>$${p.price}</p>
-
-      <button class="edit" onclick="editarProducto(${p.id})">✏️ Editar</button>
-      <button class="delete" onclick="eliminarProducto(${p.id})">❌ Eliminar</button>
+  data.forEach(p => {
+    cont.innerHTML += `
+      <div class="card">
+        <h3>${p.name}</h3>
+        <p>$${p.price}</p>
+        <button class="btn btn-edit" onclick="editarProducto(${p.id})">Editar</button>
+        <button class="btn btn-delete" onclick="eliminarProducto(${p.id})">Eliminar</button>
+      </div>
     `;
-
-    contenedor.appendChild(div);
   });
 }
-
-// EDITAR
-function editarProducto(id) {
-  const producto = productosGlobal.find(p => p.id === id);
-
-  productoEditando = producto.id;
-
-  document.getElementById('nombre').value = producto.name;
-  document.getElementById('precio').value = producto.price;
-  document.getElementById('sku').value = producto.sku || '';
-  document.getElementById('descripcion').value = producto.description || '';
-
-  if (producto.categories.length > 0) {
-    document.getElementById('categoria').value = producto.categories[0].id;
-  }
-}
-
-// GUARDAR
-async function guardarProducto() {
-
-  const nombre = document.getElementById('nombre').value;
-  const precio = document.getElementById('precio').value;
-  const sku = document.getElementById('sku').value;
-  const descripcion = document.getElementById('descripcion').value;
-  const categoria = document.getElementById('categoria').value;
-
-  const data = {
-    name: nombre,
-    type: "simple",
-    regular_price: precio,
-    sku: sku,
-    description: descripcion,
-    categories: [{ id: parseInt(categoria) }]
-  };
-
-  if (productoEditando) {
-    await fetch(`https://taqueria-dashboard.onrender.com/products/${productoEditando}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    alert("Producto actualizado 🔥");
-  } else {
-    await fetch('https://taqueria-dashboard.onrender.com/products', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    alert("Producto creado 🔥");
-  }
-
-  productoEditando = null;
-  verProductos();
-}
-
-// ELIMINAR
-async function eliminarProducto(id) {
-  await fetch(`https://taqueria-dashboard.onrender.com/products/${id}`, {
-    method: 'DELETE'
-  });
-  alert("Producto eliminado ❌");
-  verProductos();
-}
-
-// INICIO
-verPedidos();
 
 </script>
 
