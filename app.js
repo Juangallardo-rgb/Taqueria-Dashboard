@@ -48,6 +48,7 @@ function mostrarInicio() {
   `;
 
   document.getElementById('contenedor').innerHTML = '';
+  cargarEstadoRestaurante()
 }
 
 // =====================
@@ -249,3 +250,27 @@ async function eliminarProducto(id) {
 
 // INICIO
 mostrarInicio();
+
+async function cargarEstadoRestaurante() {
+
+  const res = await fetch('/estado-restaurante');
+  const data = await res.json();
+
+  const estado = document.getElementById('estadoRestaurante');
+
+  if (data.abierto) {
+    estado.innerText = "🟢 Abierto";
+  } else {
+    estado.innerText = "🔴 Cerrado";
+  }
+
+}
+async function toggleRestaurante() {
+
+  await fetch('/toggle-restaurante', {
+    method: 'POST'
+  });
+
+  cargarEstadoRestaurante();
+
+}

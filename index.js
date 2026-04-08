@@ -324,6 +324,27 @@ app.post('/login', async (req, res) => {
     res.status(500).send('Error login');
   }
 });
+app.get('/estado-restaurante', async (req, res) => {
+
+  const result = await pool.query(
+    'SELECT abierto FROM restaurantes WHERE id = 1'
+  );
+
+  res.json(result.rows[0]);
+
+});
+app.post('/toggle-restaurante', async (req, res) => {
+
+  const result = await pool.query(`
+    UPDATE restaurantes
+    SET abierto = NOT abierto
+    WHERE id = 1
+    RETURNING abierto
+  `);
+
+  res.json(result.rows[0]);
+
+});
 
 // 🚀 START
 app.listen(PORT, () => {
