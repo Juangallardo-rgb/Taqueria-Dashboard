@@ -100,7 +100,6 @@ app.post('/webhook-shipday', async (req, res) => {
 
   console.log("🔥🔥 HEADERS:", req.headers);
   console.log("🔥🔥 BODY RAW:", req.body);
-
   const data = req.body;
 
   try {
@@ -117,13 +116,13 @@ app.post('/webhook-shipday', async (req, res) => {
         picked_up_at = EXCLUDED.picked_up_at,
         delivered_at = EXCLUDED.delivered_at`,
       [
-        data.orderNumber || "UNKNOWN",
-        data.driverName || null,
-        data.status || null,
-        data.totalCost || 0,
-        data.trackingUrl || null,
-        data.pickupTime || null,
-        data.deliveredTime || null
+      data.orderNumber || data.order?.orderNumber,
+      data.driverName || data.driver?.name,
+      data.status,
+      data.deliveryFee,
+      data.trackingLink,
+      data.pickedUpAt,
+      data.deliveredAt
       ]
     );
 
@@ -165,7 +164,7 @@ app.get('/orders-complete', async (req, res) => {
         d.delivered_at
       FROM pedidos p
       LEFT JOIN deliveries d
-      ON CAST(d.order_number AS TEXT) LIKE '%' || p.id || '%'
+      ON d.order_number = p.id::text
       ORDER BY p.created_at DESC
     `);
 
