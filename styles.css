@@ -7,6 +7,7 @@ body {
   font-family: "Segoe UI", sans-serif;
   background: #f8fafc;
   color: #0f172a;
+    -webkit-tap-highlight-color: transparent;
 }
 
 /* LOGIN */
@@ -153,4 +154,78 @@ button[onclick*="eliminarProducto"] {
     height: auto;
     flex-direction: row;
   }
+}
+
+/* ================= MOBILE APP MODE ================= */
+@media (max-width: 768px) {
+
+  body {
+    overflow-x: hidden;
+  }
+
+  .app {
+    flex-direction: column;
+  }
+
+  /* SIDEBAR → BOTTOM NAV */
+  .sidebar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 70px;
+    flex-direction: row;
+    justify-content: space-around;
+    align-items: center;
+    border-top: 1px solid #ddd;
+    z-index: 1000;
+  }
+
+  .business-logo {
+    display: none;
+  }
+
+  .menu {
+    display: flex;
+    width: 100%;
+    justify-content: space-around;
+  }
+
+  .menu button {
+    flex: 1;
+    margin: 0 5px;
+    font-size: 12px;
+    padding: 10px;
+  }
+
+  .logout {
+    display: none;
+  }
+
+  /* MAIN */
+  .main {
+    padding: 15px;
+    padding-bottom: 90px; /* espacio para navbar */
+  }
+
+  /* TOPBAR */
+  .topbar {
+    flex-direction: row;
+    justify-content: space-between;
+  }
+
+  .logo-denix {
+    width: 70px;
+  }
+
+  /* GRID */
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* CARD */
+  .card {
+    width: 100%;
+  }
+
 }
