@@ -60,7 +60,7 @@ button {
 }
 
 .menu button:hover {
-  background: #cbd5f5;
+  background: #ef4444;
 }
 
 /* BOTON GUARDAR */
@@ -72,7 +72,7 @@ button[onclick="guardarProducto()"] {
 
 /* BOTONES CRUD */
 button[onclick*="editarProducto"] {
-  background: #ef4444;
+  background: #260db0;
   color: white;
   margin-right: 5px;
 }

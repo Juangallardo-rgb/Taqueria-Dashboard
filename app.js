@@ -55,28 +55,49 @@ function mostrarInicio() {
 // =====================
 async function verPedidos() {
 
-  document.getElementById('contenido').innerHTML = '';
-
   const contenido = document.getElementById('contenido');
   const contenedor = document.getElementById('contenedor');
 
+  // LIMPIAR TODO
   contenido.innerHTML = '';
-  contenedor.innerHTML = '';
+  contenedor.innerHTML = '<p>Cargando pedidos...</p>';
 
-  const res = await fetch('/orders-complete');
-  const data = await res.json();
+  try {
 
-  data.forEach(p => {
-    cont.innerHTML += `
-      <div class="card">
-        <h3>Pedido #${p.id}</h3>
-        <p>$${p.total}</p>
-        <p>${p.estado}</p>
-        <p>🚚 ${p.estado_envio || "pendiente"}</p>
-        <p>👤 ${p.driver_name || "no asignado"}</p>
-      </div>
-    `;
-  });
+    const res = await fetch('/orders-complete');
+
+    if (!res.ok) {
+      throw new Error("Error en API pedidos");
+    }
+
+    const data = await res.json();
+
+    console.log("📦 PEDIDOS:", data);
+
+    contenedor.innerHTML = '';
+
+    if (!data || data.length === 0) {
+      contenedor.innerHTML = "<p>No hay pedidos</p>";
+      return;
+    }
+
+    data.forEach(p => {
+      contenedor.innerHTML += `
+        <div class="card">
+          <h3>Pedido #${p.id}</h3>
+          <p>💰 $${p.total}</p>
+          <p>📊 ${p.estado}</p>
+          <p>🚚 ${p.estado_envio || "pendiente"}</p>
+          <p>👤 ${p.driver_name || "no asignado"}</p>
+        </div>
+      `;
+    });
+
+  } catch (error) {
+    console.error("❌ ERROR PEDIDOS:", error);
+    contenedor.innerHTML = "<p>Error cargando pedidos</p>";
+  }
+
 }
 
 // =====================
