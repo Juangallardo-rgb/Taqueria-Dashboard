@@ -57,11 +57,14 @@ async function verPedidos() {
 
   document.getElementById('contenido').innerHTML = '';
 
+  const contenido = document.getElementById('contenido');
+  const contenedor = document.getElementById('contenedor');
+
+  contenido.innerHTML = '';
+  contenedor.innerHTML = '';
+
   const res = await fetch('/orders-complete');
   const data = await res.json();
-
-  const cont = document.getElementById('contenedor');
-  cont.innerHTML = '';
 
   data.forEach(p => {
     cont.innerHTML += `
