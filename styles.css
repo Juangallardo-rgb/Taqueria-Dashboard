@@ -72,7 +72,7 @@ button[onclick="guardarProducto()"] {
 
 /* BOTONES CRUD */
 button[onclick*="editarProducto"] {
-  background: #3b82f6;
+  background: #ef4444;
   color: white;
   margin-right: 5px;
 }
