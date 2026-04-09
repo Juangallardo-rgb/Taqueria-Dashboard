@@ -88,8 +88,24 @@ async function verPedidos() {
 
     <h3>Pedido #${p.id}</h3>
 
+    <p>🕒 ${new Date(p.created_at).toLocaleString()}</p>
+
     <p>👤 ${p.customer_name || 'Cliente'}</p>
 
+<div>
+      <strong>🍽 Detalle:</strong>
+      ${
+  p.items
+  ? (typeof p.items === "string"
+      ? JSON.parse(p.items)
+      : p.items
+    ).map(i => `
+      <div>• ${i.nombre} x${i.cantidad}</div>
+    `).join('')
+  : "Sin detalle"
+    }
+    </div>
+    
     <p>💰 $${p.total}</p>
 
     <p>📊 ${p.estado}</p>
@@ -109,22 +125,6 @@ async function verPedidos() {
     📍 Ver seguimiento
   </a>
 ` : ''}
-
-    <p>🕒 ${new Date(p.created_at).toLocaleString()}</p>
-
-    <div>
-      <strong>🍽 Detalle:</strong>
-      ${
-  p.items
-  ? (typeof p.items === "string"
-      ? JSON.parse(p.items)
-      : p.items
-    ).map(i => `
-      <div>• ${i.nombre} x${i.cantidad}</div>
-    `).join('')
-  : "Sin detalle"
-    }
-    </div>
 
   </div>
 `;
