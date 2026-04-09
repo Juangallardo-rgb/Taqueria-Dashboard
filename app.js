@@ -1,3 +1,4 @@
+let pedidosVistos = JSON.parse(localStorage.getItem("pedidosVistos")) || [];
 let productosGlobal = [];
 let productoEditando = null;
 
@@ -112,7 +113,7 @@ async function verPedidos(esAuto = false) {
       } catch (e) {}
 
       contenedor.innerHTML += `
-        <div class="card ${p.id === ultimoPedidoId ? 'nuevo' : ''}">
+        <div class="card ${!pedidosVistos.includes(p.id) ? 'nuevo' : ''}" onclick="marcarComoVisto(${p.id}, this)">
 
           <h3>Pedido #${p.id}</h3>
 
@@ -261,3 +262,12 @@ async function toggleRestaurante() {
 // INICIO APP
 // =====================
 mostrarInicio();
+function marcarComoVisto(id, elemento) {
+
+  if (!pedidosVistos.includes(id)) {
+    pedidosVistos.push(id);
+    localStorage.setItem("pedidosVistos", JSON.stringify(pedidosVistos));
+  }
+
+  elemento.classList.remove('nuevo');
+}
