@@ -131,8 +131,7 @@ app.post('/webhook-shipday', async (req, res) => {
   const data = req.body;
 
   const orderNumber = data.order?.order_number; // 🔥 CLAVE REAL
-  const driverName = data.carrier?.name || null;
-
+  const driverName = data.carrier?.name || data.delivery_details?.name || "No asignado";
   try {
 
     if (!orderNumber) {

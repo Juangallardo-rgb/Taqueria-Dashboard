@@ -94,9 +94,21 @@ async function verPedidos() {
 
     <p>📊 ${p.estado}</p>
 
-    <p>🚚 ${p.estado_envio || "pendiente"}</p>
-
     <p>👨‍✈️ ${p.driver_name ? p.driver_name : "pendiente"}</p>
+    ${p.tracking_url ? `
+  <a href="${p.tracking_url}" target="_blank" style="
+    display: inline-block;
+    margin-top: 10px;
+    padding: 8px 12px;
+    background: #22c55e;
+    color: white;
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 14px;
+  ">
+    📍 Ver seguimiento
+  </a>
+` : ''}
 
     <p>🕒 ${new Date(p.created_at).toLocaleString()}</p>
 
