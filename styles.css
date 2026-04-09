@@ -289,13 +289,10 @@ input:checked + .slider:before {
   transform: translateX(24px);
 }
 
-.card {
-  border: 2px solid #000000;
-  border-radius: 12px;
-  padding: 15px;
-  margin-bottom: 15px;
-  background: white;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+.card.nuevo {
+  border: 2px solid #22c55e;
+  background: #f0fdf4;
+  animation: pulse 1s ease-in-out 2;
 }
 
 @keyframes pulse {
