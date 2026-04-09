@@ -96,7 +96,7 @@ async function verPedidos() {
 
     <p>🚚 ${p.estado_envio || "pendiente"}</p>
 
-    <p>👨‍✈️ ${p.driver_name || "no asignado"}</p>
+    <p>👨‍✈️ ${p.driver_name ? p.driver_name : "pendiente"}</p>
 
     <p>🕒 ${new Date(p.created_at).toLocaleString()}</p>
 
