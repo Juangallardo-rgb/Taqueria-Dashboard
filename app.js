@@ -103,12 +103,15 @@ async function verPedidos() {
     <div>
       <strong>🍽 Detalle:</strong>
       ${
-        p.items
-        ? JSON.parse(p.items).map(i => `
-          <div>• ${i.nombre} x${i.cantidad}</div>
-        `).join('')
-        : "Sin detalle"
-      }
+  p.items
+  ? (typeof p.items === "string"
+      ? JSON.parse(p.items)
+      : p.items
+    ).map(i => `
+      <div>• ${i.nombre} x${i.cantidad}</div>
+    `).join('')
+  : "Sin detalle"
+    }
     </div>
 
   </div>
