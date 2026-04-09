@@ -62,7 +62,7 @@ function mostrarInicio() {
 // PEDIDOS (TIEMPO REAL)
 // =====================
 async function verPedidos(esAuto = false) {
-
+  document.getElementById('tituloPagina').innerText = "Pedidos";
   window.viendoPedidos = true;
 
   const contenido = document.getElementById('contenido');
@@ -119,18 +119,18 @@ async function verPedidos(esAuto = false) {
 
           <p>🕒 ${new Date(p.created_at).toLocaleString()}</p>
 
-          <p>👤 ${p.customer_name || 'Cliente'}</p>
+          <p>👤Cliente: ${p.customer_name || 'Cliente'}</p>
 
           <div>
             <strong>🍽 Detalle:</strong>
             ${itemsHTML}
           </div>
 
-          <p>💰 $${p.total}</p>
+          <p>💰Total: $${p.total}</p>
 
-          <p>📊 ${p.estado}</p>
+          <p>📊Estado: ${p.estado}</p>
 
-          <p>👨‍✈️ ${p.driver_name || "Sin asignar"}</p>
+          <p>👨‍✈️Driver: ${p.driver_name || "Sin asignar"}</p>
 
           ${p.tracking_url ? `
             <a href="${p.tracking_url}" target="_blank" class="btn-tracking">
@@ -191,7 +191,7 @@ async function cargarCategorias() {
 // PRODUCTOS
 // =====================
 async function verProductos() {
-
+  document.getElementById('tituloPagina').innerText = "Productos";
   window.viendoPedidos = false;
 
   const contenido = document.getElementById('contenido');
@@ -262,6 +262,7 @@ async function toggleRestaurante() {
 // INICIO APP
 // =====================
 mostrarInicio();
+document.getElementById('tituloPagina').innerText = "Dashboard";
 function marcarComoVisto(id, elemento) {
 
   if (!pedidosVistos.includes(id)) {
