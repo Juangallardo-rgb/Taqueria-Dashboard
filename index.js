@@ -1,3 +1,7 @@
+function convertirFecha(timestamp) {
+  if (!timestamp) return null;
+  return new Date(Number(timestamp));
+}
 require('dotenv').config();
 const pool = require('./database');
 
@@ -130,8 +134,8 @@ app.post('/webhook-shipday', async (req, res) => {
       data.order_status, // 🔥 usa este también mejor
       data.order?.delivery_fee,
       data.trackingUrl,
-      data.order?.expected_pickup_time,
-      data.order?.expected_delivery_time
+      convertirFecha(data.order?.pickedup_time || data.order?.expected_pickup_time),
+      convertirFecha(data.order?.delivery_time || data.order?.expected_delivery_time)
     ]);
 
     console.log("✅ GUARDADO CORRECTO:", orderNumber);
