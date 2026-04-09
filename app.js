@@ -59,6 +59,7 @@ async function verPedidos() {
   const contenido = document.getElementById('contenido');
   const contenedor = document.getElementById('contenedor');
 
+  console.log("PEDIDO FRONT:", p);
   // LIMPIAR TODO
   contenido.innerHTML = '';
   contenedor.innerHTML = '<p>Cargando pedidos...</p>';
@@ -105,12 +106,13 @@ async function verPedidos() {
   : "Sin detalle"
     }
     </div>
-    
+
     <p>💰 $${p.total}</p>
 
     <p>📊 ${p.estado}</p>
 
     <p>👨‍✈️ ${p.driver_name ? p.driver_name : "pendiente"}</p>
+    
     ${p.tracking_url ? `
   <a href="${p.tracking_url}" target="_blank" style="
     display: inline-block;
