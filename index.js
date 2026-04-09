@@ -98,13 +98,22 @@ app.post('/webhook-order', async (req, res) => {
 // ===============================
 app.post('/webhook-shipday', async (req, res) => {
 
-  console.log("🔥🔥 HEADERS:", req.headers);
-  console.log("🔥🔥 BODY RAW:", req.body);
+  console.log("🔥 SHIPDAY BODY:", req.body);
+
   const data = req.body;
 
+  const orderNumber = data.order?.order_number; // 🔥 CLAVE REAL
+  const driverName = data.driverName || data.driver?.name;
+
   try {
-    await pool.query(
-      `INSERT INTO deliveries 
+
+    if (!orderNumber) {
+      console.log("❌ NO LLEGÓ order_number");
+      return res.sendStatus(400);
+    }
+
+    await pool.query(`
+      INSERT INTO deliveries 
       (order_number, driver_name, status, delivery_cost, tracking_url, picked_up_at, delivered_at)
       VALUES ($1,$2,$3,$4,$5,$6,$7)
       ON CONFLICT (order_number)
@@ -114,19 +123,18 @@ app.post('/webhook-shipday', async (req, res) => {
         delivery_cost = EXCLUDED.delivery_cost,
         tracking_url = EXCLUDED.tracking_url,
         picked_up_at = EXCLUDED.picked_up_at,
-        delivered_at = EXCLUDED.delivered_at`,
-      [
-      data.orderNumber || data.order?.orderNumber,
-      data.driverName || data.driver?.name,
-      data.status,
-      data.deliveryFee,
-      data.trackingLink,
-      data.pickedUpAt,
-      data.deliveredAt
-      ]
-    );
+        delivered_at = EXCLUDED.delivered_at
+    `, [
+      String(orderNumber), // 🔥 importante como string
+      driverName,
+      data.order_status, // 🔥 usa este también mejor
+      data.order?.delivery_fee,
+      data.trackingUrl,
+      data.order?.expected_pickup_time,
+      data.order?.expected_delivery_time
+    ]);
 
-    console.log("✅ GUARDADO SHIPDAY");
+    console.log("✅ GUARDADO CORRECTO:", orderNumber);
 
     res.sendStatus(200);
 
@@ -134,6 +142,7 @@ app.post('/webhook-shipday', async (req, res) => {
     console.error("❌ ERROR SHIPDAY:", error);
     res.sendStatus(500);
   }
+
 });
 
 
