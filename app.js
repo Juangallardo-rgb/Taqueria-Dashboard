@@ -65,7 +65,7 @@ async function verPedidos() {
 
   try {
 
-    const res = await fetch('/orders-complete');
+    const res = await fetch('/orders-complete?ts=' + Date.now());
 
     if (!res.ok) {
       throw new Error("Error en API pedidos");
@@ -83,49 +83,60 @@ async function verPedidos() {
     }
 
     data.forEach(p => {
-      contenedor.innerHTML += `
-  <div class="card">
 
-    <h3>Pedido #${p.id}</h3>
+  console.log("PEDIDO FRONT:", p);
 
-    <p>🕒 ${new Date(p.created_at).toLocaleString()}</p>
+  let itemsHTML = "Sin detalle";
 
-    <p>👤 ${p.customer_name || 'Cliente'}</p>
+  try {
+    if (p.items) {
+      const items = typeof p.items === "string"
+        ? JSON.parse(p.items)
+        : p.items;
 
-<div>
-      <strong>🍽 Detalle:</strong>
-      ${
-  p.items
-  ? (typeof p.items === "string"
-      ? JSON.parse(p.items)
-      : p.items
-    ).map(i => `
-      <div>• ${i.nombre} x${i.cantidad}</div>
-    `).join('')
-  : "Sin detalle"
+      itemsHTML = items.map(i => `
+        <div>• ${i.nombre} x${i.cantidad}</div>
+      `).join('');
     }
-    </div>
+  } catch (e) {
+    console.error("❌ ERROR PARSE ITEMS:", e);
+  }
 
-    <p>💰 $${p.total}</p>
+  contenedor.innerHTML += `
+    <div class="card">
 
-    <p>📊 ${p.estado}</p>
+      <h3>Pedido #${p.id}</h3>
 
-    <p>👨‍✈️ ${p.driver_name ? p.driver_name : "pendiente"}</p>
+      <p>👤 ${p.customer_name || 'Cliente'}</p>
 
-    ${p.tracking_url ? `
-  <a href="${p.tracking_url}" target="_blank" style="
-    display: inline-block;
-    margin-top: 10px;
-    padding: 8px 12px;
-    background: #22c55e;
-    color: white;
-    border-radius: 8px;
-    text-decoration: none;
-    font-size: 14px;
-  ">
-    📍 Ver seguimiento
-  </a>
-` : ''}
+      <p>💰 $${p.total}</p>
+
+      <p>📊 ${p.estado}</p>
+
+      <p>👨‍✈️ ${p.driver_name || "pendiente"}</p>
+
+      <p>🕒 ${new Date(p.created_at).toLocaleString()}</p>
+
+      <div>
+        <strong>🍽 Detalle:</strong>
+        ${itemsHTML}
+      </div>
+
+      ${p.tracking_url ? `
+        <a href="${p.tracking_url}" target="_blank" style="
+          display:block;
+          margin-top:10px;
+          padding:10px;
+          background:#22c55e;
+          color:white;
+          border-radius:8px;
+          text-align:center;
+          font-weight:bold;
+          text-decoration:none;
+        ">
+          📍 Ver seguimiento
+        </a>
+      ` : ''}
 
   </div>
 `;
