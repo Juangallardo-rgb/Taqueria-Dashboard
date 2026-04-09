@@ -3,7 +3,6 @@ let productoEditando = null;
 
 // LOGIN
 async function login() {
-
   const email = document.getElementById('email').value;
   const password = document.getElementById('password').value;
 
@@ -59,7 +58,6 @@ async function verPedidos() {
   const contenido = document.getElementById('contenido');
   const contenedor = document.getElementById('contenedor');
 
-  // LIMPIAR TODO
   contenido.innerHTML = '';
   contenedor.innerHTML = '<p>Cargando pedidos...</p>';
 
@@ -67,13 +65,11 @@ async function verPedidos() {
 
     const res = await fetch('/orders-complete?ts=' + Date.now());
 
-    if (!res.ok) {
-      throw new Error("Error en API pedidos");
-    }
+    if (!res.ok) throw new Error("Error API");
 
     const data = await res.json();
 
-    console.log("📦 PEDIDOS:", data);
+    console.log("🔥 DATA COMPLETA:", data);
 
     contenedor.innerHTML = '';
 
@@ -84,69 +80,69 @@ async function verPedidos() {
 
     data.forEach(p => {
 
-  console.log("PEDIDO FRONT:", p);
+      console.log("👉 DRIVER:", p.driver_name);
+      console.log("👉 TRACKING:", p.tracking_url);
 
-  let itemsHTML = "Sin detalle";
+      let itemsHTML = "Sin detalle";
 
-  try {
-    if (p.items) {
-      const items = typeof p.items === "string"
-        ? JSON.parse(p.items)
-        : p.items;
+      try {
+        if (p.items) {
+          const items = typeof p.items === "string"
+            ? JSON.parse(p.items)
+            : p.items;
 
-      itemsHTML = items.map(i => `
-        <div>• ${i.nombre} x${i.cantidad}</div>
-      `).join('');
-    }
-  } catch (e) {
-    console.error("❌ ERROR PARSE ITEMS:", e);
-  }
+          itemsHTML = items.map(i => `
+            <div>• ${i.nombre} x${i.cantidad}</div>
+          `).join('');
+        }
+      } catch (e) {
+        console.error("❌ ERROR ITEMS:", e);
+      }
 
-  contenedor.innerHTML += `
-    <div class="card">
+      contenedor.innerHTML += `
+        <div class="card">
 
-      <h3>Pedido #${p.id}</h3>
+          <h3>Pedido #${p.id}</h3>
 
-      <p>👤 ${p.customer_name || 'Cliente'}</p>
+          <p>👤 ${p.customer_name || 'Cliente'}</p>
 
-      <p>💰 $${p.total}</p>
+          <p>💰 $${p.total}</p>
 
-      <p>📊 ${p.estado}</p>
+          <p>📊 ${p.estado}</p>
 
-      <p>👨‍✈️ ${p.driver_name || "pendiente"}</p>
+          <p>👨‍✈️ ${p.driver_name ? p.driver_name : "pendiente"}</p>
 
-      <p>🕒 ${new Date(p.created_at).toLocaleString()}</p>
+          <p>🕒 ${new Date(p.created_at).toLocaleString()}</p>
 
-      <div>
-        <strong>🍽 Detalle:</strong>
-        ${itemsHTML}
-      </div>
+          <div>
+            <strong>🍽 Detalle:</strong>
+            ${itemsHTML}
+          </div>
 
-      ${p.tracking_url ? `
-        <a href="${p.tracking_url}" target="_blank" style="
-          display:block;
-          margin-top:10px;
-          padding:10px;
-          background:#22c55e;
-          color:white;
-          border-radius:8px;
-          text-align:center;
-          font-weight:bold;
-          text-decoration:none;
-        ">
-          📍 Ver seguimiento
-        </a>
-      ` : ''}
+          ${p.tracking_url ? `
+            <a href="${p.tracking_url}" target="_blank" style="
+              display:block;
+              margin-top:10px;
+              padding:10px;
+              background:#22c55e;
+              color:white;
+              border-radius:8px;
+              text-align:center;
+              font-weight:bold;
+              text-decoration:none;
+            ">
+              📍 Ver seguimiento
+            </a>
+          ` : ''}
 
-  </div>
-`;
+        </div>
+      `;
     });
 
   } catch (error) {
     console.error("❌ ERROR PEDIDOS:", error);
     contenedor.innerHTML = "<p>Error cargando pedidos</p>";
   }
-
 }
 
 // =====================
@@ -216,7 +212,6 @@ async function verProductos() {
       </div>
     `;
   });
-
 }
 
 // =====================
@@ -299,6 +294,9 @@ async function eliminarProducto(id) {
 // INICIO
 mostrarInicio();
 
+// =====================
+// RESTAURANTE
+// =====================
 async function cargarEstadoRestaurante() {
 
   const res = await fetch('/estado-restaurante');
@@ -316,7 +314,6 @@ async function cargarEstadoRestaurante() {
     switchInput.checked = false;
     texto.innerText = "🔴 Cerrado";
   }
-
 }
 
 async function toggleRestaurante() {
@@ -326,5 +323,4 @@ async function toggleRestaurante() {
   });
 
   cargarEstadoRestaurante();
-
 }
