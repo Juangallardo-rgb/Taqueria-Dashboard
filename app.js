@@ -112,7 +112,7 @@ async function verPedidos(esAuto = false) {
       } catch (e) {}
 
       contenedor.innerHTML += `
-        <div class="card ${p.id === ultimoPedidoId ? 'nuevo' : ''}">
+        <div class="card">
 
           <h3>Pedido #${p.id}</h3>
 
