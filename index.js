@@ -202,7 +202,7 @@ app.get('/orders-complete', async (req, res) => {
         d.delivered_at
       FROM pedidos p
       LEFT JOIN deliveries d
-      ON d.order_number = p.id::text
+      ON d.order_number = p.woo_order_id
       ORDER BY p.created_at DESC
     `);
 
