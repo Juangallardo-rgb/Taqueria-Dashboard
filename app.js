@@ -40,7 +40,7 @@ function logout() {
 function mostrarInicio() {
 
   document.getElementById('contenido').innerHTML = `
-    <div class="card">
+    <div class="card ${p.id === ultimoPedidoId ? 'nuevo' : ''}">
       <h2>Bienvenido a DENIX 🚀</h2>
       <p>Tu sistema inteligente de pedidos.</p>
     </div>
@@ -49,11 +49,11 @@ function mostrarInicio() {
   document.getElementById('contenedor').innerHTML = '';
   cargarEstadoRestaurante()
 }
-
+window.viendoPedidos = true;
 // =====================
 // PEDIDOS
 // =====================
-async function verPedidos() {
+async function verPedidos(esAuto = false) {
 
   const contenido = document.getElementById('contenido');
   const contenedor = document.getElementById('contenedor');
@@ -68,6 +68,15 @@ async function verPedidos() {
     if (!res.ok) throw new Error("Error API");
 
     const data = await res.json();
+    if (data.length > 0) {
+  const nuevoId = data[0].id;
+
+  if (ultimoPedidoId && nuevoId > ultimoPedidoId) {
+    reproducirSonido();
+  }
+
+  ultimoPedidoId = nuevoId;
+}
 
     console.log("🔥 DATA COMPLETA:", data);
 
@@ -171,7 +180,7 @@ async function cargarCategorias() {
 // PRODUCTOS
 // =====================
 async function verProductos() {
-
+  window.viendoPedidos = false;
   const contenido = document.getElementById('contenido');
   const contenedor = document.getElementById('contenedor');
 
@@ -293,6 +302,14 @@ async function eliminarProducto(id) {
 
 // INICIO
 mostrarInicio();
+window.viendoPedidos = false;
+let ultimoPedidoId = null;
+
+setInterval(() => {
+  if (window.viendoPedidos) {
+    verPedidos(true);
+  }
+}, 5000); // cada 5 segundos
 
 // =====================
 // RESTAURANTE
@@ -323,4 +340,8 @@ async function toggleRestaurante() {
   });
 
   cargarEstadoRestaurante();
+}
+function reproducirSonido() {
+  const audio = new Audio('https://www.soundjay.com/buttons/sounds/button-3.mp3');
+  audio.play();
 }

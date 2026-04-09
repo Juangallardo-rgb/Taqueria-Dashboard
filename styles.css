@@ -288,3 +288,15 @@ input:checked + .slider {
 input:checked + .slider:before {
   transform: translateX(24px);
 }
+
+.card.nuevo {
+  border: 2px solid #22c55e;
+  background: #f0fdf4;
+  animation: pulse 1s ease-in-out 2;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+  100% { transform: scale(1); }
+}
