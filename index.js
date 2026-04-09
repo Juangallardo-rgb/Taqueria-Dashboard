@@ -192,6 +192,8 @@ app.get('/orders-complete', async (req, res) => {
         p.id,
         p.total,
         p.estado,
+        p.customer_name,
+        p.items,
         p.created_at,
         d.driver_name,
         d.status AS estado_envio,

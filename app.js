@@ -84,14 +84,35 @@ async function verPedidos() {
 
     data.forEach(p => {
       contenedor.innerHTML += `
-        <div class="card">
-          <h3>Pedido #${p.id}</h3>
-          <p>💰 $${p.total}</p>
-          <p>📊 ${p.estado}</p>
-          <p>🚚 ${p.estado_envio || "pendiente"}</p>
-          <p>👤 ${p.driver_name || "no asignado"}</p>
-        </div>
-      `;
+  <div class="card">
+
+    <h3>Pedido #${p.id}</h3>
+
+    <p>👤 ${p.customer_name || 'Cliente'}</p>
+
+    <p>💰 $${p.total}</p>
+
+    <p>📊 ${p.estado}</p>
+
+    <p>🚚 ${p.estado_envio || "pendiente"}</p>
+
+    <p>👨‍✈️ ${p.driver_name || "no asignado"}</p>
+
+    <p>🕒 ${new Date(p.created_at).toLocaleString()}</p>
+
+    <div>
+      <strong>🍽 Detalle:</strong>
+      ${
+        p.items
+        ? JSON.parse(p.items).map(i => `
+          <div>• ${i.nombre} x${i.cantidad}</div>
+        `).join('')
+        : "Sin detalle"
+      }
+    </div>
+
+  </div>
+`;
     });
 
   } catch (error) {
