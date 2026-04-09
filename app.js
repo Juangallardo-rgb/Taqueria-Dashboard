@@ -1,7 +1,12 @@
 let productosGlobal = [];
 let productoEditando = null;
 
+let ultimoPedidoId = null;
+window.viendoPedidos = false;
+
+// =====================
 // LOGIN
+// =====================
 async function login() {
   const email = document.getElementById('email').value;
   const password = document.getElementById('password').value;
@@ -39,27 +44,33 @@ function logout() {
 // =====================
 function mostrarInicio() {
 
+  window.viendoPedidos = false;
+
   document.getElementById('contenido').innerHTML = `
-    <div class="card ${p.id === ultimoPedidoId ? 'nuevo' : ''}">
+    <div class="card">
       <h2>Bienvenido a DENIX 🚀</h2>
       <p>Tu sistema inteligente de pedidos.</p>
     </div>
   `;
 
   document.getElementById('contenedor').innerHTML = '';
-  cargarEstadoRestaurante()
+  cargarEstadoRestaurante();
 }
-window.viendoPedidos = true;
+
 // =====================
-// PEDIDOS
+// PEDIDOS (TIEMPO REAL)
 // =====================
 async function verPedidos(esAuto = false) {
+
+  window.viendoPedidos = true;
 
   const contenido = document.getElementById('contenido');
   const contenedor = document.getElementById('contenedor');
 
-  contenido.innerHTML = '';
-  contenedor.innerHTML = '<p>Cargando pedidos...</p>';
+  if (!esAuto) {
+    contenido.innerHTML = '';
+    contenedor.innerHTML = '<p>Cargando pedidos...</p>';
+  }
 
   try {
 
@@ -68,29 +79,23 @@ async function verPedidos(esAuto = false) {
     if (!res.ok) throw new Error("Error API");
 
     const data = await res.json();
-    if (data.length > 0) {
-  const nuevoId = data[0].id;
-
-  if (ultimoPedidoId && nuevoId > ultimoPedidoId) {
-    reproducirSonido();
-  }
-
-  ultimoPedidoId = nuevoId;
-}
-
-    console.log("🔥 DATA COMPLETA:", data);
-
-    contenedor.innerHTML = '';
 
     if (!data || data.length === 0) {
       contenedor.innerHTML = "<p>No hay pedidos</p>";
       return;
     }
 
-    data.forEach(p => {
+    const nuevoId = data[0].id;
 
-      console.log("👉 DRIVER:", p.driver_name);
-      console.log("👉 TRACKING:", p.tracking_url);
+    if (ultimoPedidoId && nuevoId > ultimoPedidoId) {
+      reproducirSonido();
+    }
+
+    ultimoPedidoId = nuevoId;
+
+    contenedor.innerHTML = '';
+
+    data.forEach(p => {
 
       let itemsHTML = "Sin detalle";
 
@@ -104,42 +109,30 @@ async function verPedidos(esAuto = false) {
             <div>• ${i.nombre} x${i.cantidad}</div>
           `).join('');
         }
-      } catch (e) {
-        console.error("❌ ERROR ITEMS:", e);
-      }
+      } catch (e) {}
 
       contenedor.innerHTML += `
-        <div class="card">
+        <div class="card ${p.id === ultimoPedidoId ? 'nuevo' : ''}">
 
           <h3>Pedido #${p.id}</h3>
 
           <p>🕒 ${new Date(p.created_at).toLocaleString()}</p>
 
-          <p>👤Nombre: ${p.customer_name || 'Cliente'}</p>
+          <p>👤 ${p.customer_name || 'Cliente'}</p>
 
           <div>
             <strong>🍽 Detalle:</strong>
             ${itemsHTML}
           </div>
 
-          <p>💰Total: $${p.total}</p>
+          <p>💰 $${p.total}</p>
 
-          <p>📊Estado de pedido: ${p.estado}</p>
+          <p>📊 ${p.estado}</p>
 
-          <p>🏍 Driver: ${p.driver_name ? p.driver_name : "pendiente"}</p>
+          <p>👨‍✈️ ${p.driver_name || "Sin asignar"}</p>
 
           ${p.tracking_url ? `
-            <a href="${p.tracking_url}" target="_blank" style="
-              display:block;
-              margin-top:10px;
-              padding:10px;
-              background:#22c55e;
-              color:white;
-              border-radius:8px;
-              text-align:center;
-              font-weight:bold;
-              text-decoration:none;
-            ">
+            <a href="${p.tracking_url}" target="_blank" class="btn-tracking">
               📍 Ver seguimiento
             </a>
           ` : ''}
@@ -152,6 +145,23 @@ async function verPedidos(esAuto = false) {
     console.error("❌ ERROR PEDIDOS:", error);
     contenedor.innerHTML = "<p>Error cargando pedidos</p>";
   }
+}
+
+// =====================
+// TIEMPO REAL LOOP
+// =====================
+setInterval(() => {
+  if (window.viendoPedidos) {
+    verPedidos(true);
+  }
+}, 5000);
+
+// =====================
+// SONIDO
+// =====================
+function reproducirSonido() {
+  const audio = new Audio('https://www.soundjay.com/buttons/sounds/button-3.mp3');
+  audio.play();
 }
 
 // =====================
@@ -180,7 +190,9 @@ async function cargarCategorias() {
 // PRODUCTOS
 // =====================
 async function verProductos() {
+
   window.viendoPedidos = false;
+
   const contenido = document.getElementById('contenido');
   const contenedor = document.getElementById('contenedor');
 
@@ -205,11 +217,6 @@ async function verProductos() {
 
   productosGlobal = data;
 
-  if (data.length === 0) {
-    contenedor.innerHTML = "<p>No hay productos</p>";
-    return;
-  }
-
   data.forEach(p => {
     contenedor.innerHTML += `
       <div class="card">
@@ -222,94 +229,6 @@ async function verProductos() {
     `;
   });
 }
-
-// =====================
-// EDITAR
-// =====================
-function editarProducto(id) {
-
-  const producto = productosGlobal.find(p => p.id === id);
-
-  productoEditando = producto.id;
-
-  document.getElementById('nombre').value = producto.name;
-  document.getElementById('precio').value = producto.price;
-  document.getElementById('sku').value = producto.sku || '';
-  document.getElementById('descripcion').value = producto.description || '';
-
-  if (producto.categories.length > 0) {
-    document.getElementById('categoria').value = producto.categories[0].id;
-  }
-}
-
-// =====================
-// GUARDAR
-// =====================
-async function guardarProducto() {
-
-  const nombre = document.getElementById('nombre').value;
-  const precio = document.getElementById('precio').value;
-  const sku = document.getElementById('sku').value;
-  const descripcion = document.getElementById('descripcion').value;
-  const categoria = document.getElementById('categoria').value;
-
-  const data = {
-    name: nombre,
-    type: "simple",
-    regular_price: precio,
-    sku: sku,
-    description: descripcion,
-    categories: [{ id: parseInt(categoria) }]
-  };
-
-  if (productoEditando) {
-
-    await fetch(`/products/${productoEditando}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-
-    alert("Producto actualizado 🔥");
-
-  } else {
-
-    await fetch('/products', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-
-    alert("Producto creado 🔥");
-  }
-
-  productoEditando = null;
-  verProductos();
-}
-
-// =====================
-// ELIMINAR
-// =====================
-async function eliminarProducto(id) {
-
-  await fetch(`/products/${id}`, {
-    method: 'DELETE'
-  });
-
-  alert("Producto eliminado ❌");
-  verProductos();
-}
-
-// INICIO
-mostrarInicio();
-window.viendoPedidos = false;
-let ultimoPedidoId = null;
-
-setInterval(() => {
-  if (window.viendoPedidos) {
-    verPedidos(true);
-  }
-}, 5000); // cada 5 segundos
 
 // =====================
 // RESTAURANTE
@@ -334,14 +253,11 @@ async function cargarEstadoRestaurante() {
 }
 
 async function toggleRestaurante() {
-
-  await fetch('/toggle-restaurante', {
-    method: 'POST'
-  });
-
+  await fetch('/toggle-restaurante', { method: 'POST' });
   cargarEstadoRestaurante();
 }
-function reproducirSonido() {
-  const audio = new Audio('https://www.soundjay.com/buttons/sounds/button-3.mp3');
-  audio.play();
-}
+
+// =====================
+// INICIO APP
+// =====================
+mostrarInicio();
