@@ -104,20 +104,20 @@ async function verPedidos() {
 
           <h3>Pedido #${p.id}</h3>
 
-          <p>👤 ${p.customer_name || 'Cliente'}</p>
-
-          <p>💰 $${p.total}</p>
-
-          <p>📊 ${p.estado}</p>
-
-          <p>👨‍✈️ ${p.driver_name ? p.driver_name : "pendiente"}</p>
-
           <p>🕒 ${new Date(p.created_at).toLocaleString()}</p>
+
+          <p>👤Nombre ${p.customer_name || 'Cliente'}</p>
 
           <div>
             <strong>🍽 Detalle:</strong>
             ${itemsHTML}
           </div>
+
+          <p>💰Total $${p.total}</p>
+
+          <p>📊Estado de pedido ${p.estado}</p>
+
+          <p>👨‍✈️Driver ${p.driver_name ? p.driver_name : "pendiente"}</p>
 
           ${p.tracking_url ? `
             <a href="${p.tracking_url}" target="_blank" style="
