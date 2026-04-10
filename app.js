@@ -109,7 +109,7 @@ async function verPedidos(esAuto = false) {
       </div>
     `;
       contenedor.innerHTML = '<p>Cargando pedidos...</p>';
-  
+  }
 
   try {
 
