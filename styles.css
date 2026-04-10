@@ -300,3 +300,24 @@ input:checked + .slider:before {
   50% { transform: scale(1.02); }
   100% { transform: scale(1); }
 }
+
+.tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.tab {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  background: #f3f4f6;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.tab.active {
+  background: #f97316;
+  color: white;
+}

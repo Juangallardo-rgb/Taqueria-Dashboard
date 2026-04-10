@@ -2,6 +2,7 @@ let audioPermitido = false;
 let pedidosVistos = JSON.parse(localStorage.getItem("pedidosVistos")) || [];
 let productosGlobal = [];
 let productoEditando = null;
+let tabActual = 'recientes';
 
 document.addEventListener('click', () => {
   audioPermitido = true;
@@ -74,7 +75,19 @@ async function verPedidos(esAuto = false) {
   const contenedor = document.getElementById('contenedor');
 
   if (!esAuto) {
-    contenido.innerHTML = '';
+    contenido.innerHTML = `
+  <div class="tabs">
+
+    <button onclick="cambiarTab('recientes')" id="tab-recientes" class="tab active">Recientes</button>
+
+    <button onclick="cambiarTab('hoy')" id="tab-hoy" class="tab">Hoy</button>
+
+    <button onclick="cambiarTab('ayer')" id="tab-ayer" class="tab">Ayer</button>
+
+    <button onclick="cambiarTab('semana')" id="tab-semana" class="tab">7 días</button>
+
+  </div>
+`;
     contenedor.innerHTML = '<p>Cargando pedidos...</p>';
   }
 
@@ -283,4 +296,16 @@ function marcarComoVisto(id, elemento) {
   }
 
   elemento.classList.remove('nuevo');
+}
+function cambiarTab(tab) {
+
+  tabActual = tab;
+
+  // quitar clase active
+  document.querySelectorAll('.tab').forEach(btn => btn.classList.remove('active'));
+
+  // activar el actual
+  document.getElementById('tab-' + tab).classList.add('active');
+
+  verPedidos(); // recargar pedidos con nuevo filtro
 }
