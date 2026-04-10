@@ -98,11 +98,56 @@ async function verPedidos(esAuto = false) {
     if (!res.ok) throw new Error("Error API");
 
     const data = await res.json();
+    let pedidosFiltrados = data;
 
-    if (!data || data.length === 0) {
-      contenedor.innerHTML = "<p>No hay pedidos</p>";
-      return;
-    }
+const ahora = new Date();
+
+if (tabActual === 'recientes') {
+
+  pedidosFiltrados = data.filter(p => p.estado === 'processing');
+
+}
+
+if (tabActual === 'hoy') {
+
+  pedidosFiltrados = data.filter(p => {
+    const fecha = new Date(p.created_at);
+    return p.estado === 'completed' &&
+      fecha.toDateString() === ahora.toDateString();
+  });
+
+}
+
+if (tabActual === 'ayer') {
+
+  const ayer = new Date();
+  ayer.setDate(ayer.getDate() - 1);
+
+  pedidosFiltrados = data.filter(p => {
+    const fecha = new Date(p.created_at);
+    return p.estado === 'completed' &&
+      fecha.toDateString() === ayer.toDateString();
+  });
+
+}
+
+if (tabActual === 'semana') {
+
+  const hace7dias = new Date();
+  hace7dias.setDate(hace7dias.getDate() - 7);
+
+  pedidosFiltrados = data.filter(p => {
+    const fecha = new Date(p.created_at);
+    return p.estado === 'completed' &&
+      fecha >= hace7dias;
+  });
+
+}
+
+    if (!pedidosFiltrados || pedidosFiltrados.length === 0) {
+  contenedor.innerHTML = "<p>No hay pedidos en esta sección</p>";
+  return;
+}
 
     const nuevoId = data[0].id;
 
@@ -114,7 +159,7 @@ async function verPedidos(esAuto = false) {
 
     contenedor.innerHTML = '';
 
-    data.forEach(p => {
+    pedidosFiltrados.forEach(p => {
 
       let itemsHTML = "Sin detalle";
 
