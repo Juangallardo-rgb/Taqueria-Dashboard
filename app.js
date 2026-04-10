@@ -78,7 +78,7 @@ async function verPedidos(esAuto = false) {
     contenido.innerHTML = `
   <div class="tabs">
 
-    <button onclick="cambiarTab('recientes')" id="tab-recientes" class="tab active">Recientes</button>
+    <button onclick="cambiarTab('recientes')" id="tab-recientes" class="tab active">En Proceso</button>
 
     <button onclick="cambiarTab('hoy')" id="tab-hoy" class="tab">Hoy</button>
 
