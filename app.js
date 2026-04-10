@@ -265,6 +265,7 @@ async function verProductos() {
   const contenido = document.getElementById('contenido');
   const contenedor = document.getElementById('contenedor');
 
+  // FORMULARIO
   contenido.innerHTML = `
     <div class="card">
       <h2>Crear / Editar Producto</h2>
@@ -277,26 +278,48 @@ async function verProductos() {
     </div>
   `;
 
-  contenedor.innerHTML = '';
+  contenedor.innerHTML = '<p>Cargando productos...</p>';
 
-  await cargarCategorias();
+  // CATEGORÍAS (NO BLOQUEA)
+  try {
+    await cargarCategorias();
+  } catch (e) {
+    console.log("⚠️ Error cargando categorías", e);
+  }
 
-  const res = await fetch('/products');
-  const data = await res.json();
+  // PRODUCTOS
+  try {
+    const res = await fetch('/products');
 
-  productosGlobal = data;
+    if (!res.ok) throw new Error("Error products");
 
-  data.forEach(p => {
-    contenedor.innerHTML += `
-      <div class="card">
-        <h3>${p.name}</h3>
-        <p>$${p.price}</p>
+    const data = await res.json();
 
-        <button onclick="editarProducto(${p.id})">Editar</button>
-        <button onclick="eliminarProducto(${p.id})">Eliminar</button>
-      </div>
-    `;
-  });
+    productosGlobal = data;
+
+    if (!data.length) {
+      contenedor.innerHTML = "<p>No hay productos</p>";
+      return;
+    }
+
+    contenedor.innerHTML = '';
+
+    data.forEach(p => {
+      contenedor.innerHTML += `
+        <div class="card">
+          <h3>${p.name}</h3>
+          <p>$${p.price}</p>
+
+          <button onclick="editarProducto(${p.id})">Editar</button>
+          <button onclick="eliminarProducto(${p.id})">Eliminar</button>
+        </div>
+      `;
+    });
+
+  } catch (error) {
+    console.error("❌ ERROR PRODUCTOS:", error);
+    contenedor.innerHTML = "<p>Error cargando productos</p>";
+  }
 }
 
 
