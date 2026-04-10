@@ -1,7 +1,12 @@
+let audioPermitido = false;
 let pedidosVistos = JSON.parse(localStorage.getItem("pedidosVistos")) || [];
 let productosGlobal = [];
 let productoEditando = null;
 
+document.addEventListener('click', () => {
+  audioPermitido = true;
+  console.log("🔊 Audio activado");
+}, { once: true });
 let ultimoPedidoId = null;
 window.viendoPedidos = false;
 
@@ -161,8 +166,15 @@ setInterval(() => {
 // SONIDO
 // =====================
 function reproducirSonido() {
-  const audio = new Audio('https://www.soundjay.com/buttons/sounds/button-3.mp3');
-  audio.play();
+
+  if (!audioPermitido) {
+    console.log("⛔ Audio bloqueado");
+    return;
+  }
+
+  const audio = new Audio('/sonido.mp3'); // mejor usar local
+  audio.volume = 1;
+  audio.play().catch(e => console.log("Error audio:", e));
 }
 
 // =====================

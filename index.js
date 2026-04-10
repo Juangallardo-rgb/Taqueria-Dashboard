@@ -131,7 +131,7 @@ app.post('/webhook-shipday', async (req, res) => {
   const data = req.body;
 
   const orderNumber = data.order?.order_number; // 🔥 CLAVE REAL
-  const driverName = data.carrier?.name || data.delivery_details?.name || "No asignado";
+  const driverName = data.carrier?.name || null; || "No asignado";
   try {
 
     if (!orderNumber) {
@@ -145,7 +145,7 @@ app.post('/webhook-shipday', async (req, res) => {
       VALUES ($1,$2,$3,$4,$5,$6,$7)
       ON CONFLICT (order_number)
       DO UPDATE SET
-        driver_name = EXCLUDED.driver_name,
+        driver_name = COALESCE(EXCLUDED.driver_name, deliveries.driver_name),
         status = EXCLUDED.status,
         delivery_cost = EXCLUDED.delivery_cost,
         tracking_url = EXCLUDED.tracking_url,
