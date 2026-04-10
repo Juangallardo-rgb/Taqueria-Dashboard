@@ -321,8 +321,6 @@ async function verProductos() {
     contenedor.innerHTML = "<p>Error cargando productos</p>";
   }
 }
-
-
 // =====================
 // RESTAURANTE
 // =====================
@@ -372,3 +370,8 @@ function cambiarTab(tab) {
 // INIT
 // =====================
 mostrarInicio();
+
+function irSoporte() {
+  const mensaje = encodeURIComponent("Hola, necesito soporte con DENIX 🚀");
+  window.open(`https://wa.me/14437617813?text=${mensaje}`, '_blank');
+}
