@@ -91,15 +91,14 @@ async function verPedidos(esAuto = false) {
     <div class="tabs">
 
       <button onclick="cambiarTab('recientes')" id="tab-recientes" class="tab">Recientes</button>
-
       <button onclick="cambiarTab('hoy')" id="tab-hoy" class="tab">Hoy</button>
-
       <button onclick="cambiarTab('ayer')" id="tab-ayer" class="tab">Ayer</button>
-
       <button onclick="cambiarTab('semana')" id="tab-semana" class="tab">7 días</button>
 
     </div>
   `;
+
+  contenedor.innerHTML = '<p>Cargando pedidos...</p>';
 }
     contenedor.innerHTML = '<p>Cargando pedidos...</p>';
   }
