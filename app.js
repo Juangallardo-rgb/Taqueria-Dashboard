@@ -15,30 +15,42 @@ window.viendoPedidos = false;
 // LOGIN
 // =====================
 async function login() {
-  const email = document.getElementById('email').value;
-  const password = document.getElementById('password').value;
+  try {
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
 
-  const res = await fetch('/login', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ email, password })
-  });
+    console.log("Intentando login...");
 
-  const data = await res.json();
+    const res = await fetch('/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
 
-  if (data.success) {
-    localStorage.setItem("login", "true");
-    location.reload();
-  } else {
-    alert("Credenciales incorrectas");
+    const data = await res.json();
+
+    console.log("Respuesta login:", data);
+
+    if (data.success) {
+      localStorage.setItem("login", "true");
+      location.reload();
+    } else {
+      alert("Credenciales incorrectas");
+    }
+
+  } catch (error) {
+    console.error("❌ ERROR LOGIN:", error);
+    alert("Error en login");
   }
 }
 
 // AUTO LOGIN
-if(localStorage.getItem("login") === "true") {
-  document.getElementById('loginScreen').style.display = "none";
-  document.getElementById('dashboard').style.display = "flex";
-}
+window.addEventListener('load', () => {
+  if(localStorage.getItem("login") === "true") {
+    document.getElementById('loginScreen').style.display = "none";
+    document.getElementById('dashboard').style.display = "flex";
+  }
+});
 
 // LOGOUT
 function logout() {
