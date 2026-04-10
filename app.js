@@ -372,3 +372,4 @@ function cambiarTab(tab) {
 
   verPedidos(); // recargar con filtro
 }
+window.login = login;
