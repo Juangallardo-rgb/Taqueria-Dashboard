@@ -101,10 +101,10 @@ async function verPedidos(esAuto = false) {
     contenido.innerHTML = `
       <div class="tabs">
 
-        <button onclick="cambiarTab('recientes')" id="tab-recientes" class="tab">Recientes</button>
+        <button onclick="cambiarTab('recientes')" id="tab-recientes" class="tab">En proceso</button>
         <button onclick="cambiarTab('hoy')" id="tab-hoy" class="tab">Hoy</button>
         <button onclick="cambiarTab('ayer')" id="tab-ayer" class="tab">Ayer</button>
-        <button onclick="cambiarTab('semana')" id="tab-semana" class="tab">7 días</button>
+        <button onclick="cambiarTab('semana')" id="tab-semana" class="tab">Todas</button>
 
       </div>
     `;
