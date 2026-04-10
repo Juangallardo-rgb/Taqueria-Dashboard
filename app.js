@@ -74,20 +74,21 @@ async function verPedidos(esAuto = false) {
   const contenido = document.getElementById('contenido');
   const contenedor = document.getElementById('contenedor');
 
-  if (!esAuto) {
-    contenido.innerHTML = `
-  <div class="tabs">
+ if (!esAuto) {
+  contenido.innerHTML = `
+    <div class="tabs">
 
-    <button onclick="cambiarTab('recientes')" id="tab-recientes" class="tab active">En Proceso</button>
+      <button onclick="cambiarTab('recientes')" id="tab-recientes" class="tab">Recientes</button>
 
-    <button onclick="cambiarTab('hoy')" id="tab-hoy" class="tab">Hoy</button>
+      <button onclick="cambiarTab('hoy')" id="tab-hoy" class="tab">Hoy</button>
 
-    <button onclick="cambiarTab('ayer')" id="tab-ayer" class="tab">Ayer</button>
+      <button onclick="cambiarTab('ayer')" id="tab-ayer" class="tab">Ayer</button>
 
-    <button onclick="cambiarTab('semana')" id="tab-semana" class="tab">7 días</button>
+      <button onclick="cambiarTab('semana')" id="tab-semana" class="tab">7 días</button>
 
-  </div>
-`;
+    </div>
+  `;
+}
     contenedor.innerHTML = '<p>Cargando pedidos...</p>';
   }
 
@@ -117,6 +118,13 @@ if (tabActual === 'hoy') {
   });
 
 }
+
+setTimeout(() => {
+  document.querySelectorAll('.tab').forEach(btn => btn.classList.remove('active'));
+
+  const tabActivo = document.getElementById('tab-' + tabActual);
+  if (tabActivo) tabActivo.classList.add('active');
+}, 0);
 
 if (tabActual === 'ayer') {
 
@@ -346,11 +354,9 @@ function cambiarTab(tab) {
 
   tabActual = tab;
 
-  // quitar clase active
   document.querySelectorAll('.tab').forEach(btn => btn.classList.remove('active'));
 
-  // activar el actual
   document.getElementById('tab-' + tab).classList.add('active');
 
-  verPedidos(); // recargar pedidos con nuevo filtro
+  verPedidos(); // recargar con filtro
 }

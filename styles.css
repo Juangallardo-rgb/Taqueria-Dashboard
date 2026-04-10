@@ -60,7 +60,7 @@ button {
 }
 
 .menu button:hover {
-  background: #ffac46;
+  background: #f97316;
 }
 
 /* BOTON GUARDAR */
@@ -84,7 +84,7 @@ button[onclick*="eliminarProducto"] {
 
 /* LOGOUT */
 .logout {
-  background: #ffac46;
+  background: #f97316;
   color: white;
 }
 
