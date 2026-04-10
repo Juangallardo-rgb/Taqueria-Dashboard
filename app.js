@@ -228,7 +228,6 @@ if (tabActual === 'semana') {
     console.error("❌ ERROR PEDIDOS:", error);
     contenedor.innerHTML = "<p>Error cargando pedidos</p>";
   }
-}
 
 // =====================
 // TIEMPO REAL LOOP
