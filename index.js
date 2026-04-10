@@ -126,21 +126,29 @@ app.post('/webhook-order', async (req, res) => {
 // ===============================
 app.post('/webhook-shipday', async (req, res) => {
 
-  console.log("🔥 SHIPDAY BODY:", req.body);
-
   const data = req.body;
 
-  const orderNumber = data.order?.order_number; // 🔥 CLAVE REAL
-  const driverName = data.carrier?.name || null; || "No asignado";
+  console.log("🔥 SHIPDAY:", data);
+
+  // ✅ DRIVER SEGURO (SIN ?.)
+  const driverName = data.carrier && data.carrier.name 
+    ? data.carrier.name 
+    : null;
+
+  // ✅ ORDER NUMBER SEGURO
+  const orderNumber = data.order 
+    ? data.order.order_number 
+    : null;
+
+  function convertirFecha(timestamp) {
+    if (!timestamp) return null;
+    return new Date(Number(timestamp));
+  }
+
   try {
 
-    if (!orderNumber) {
-      console.log("❌ NO LLEGÓ order_number");
-      return res.sendStatus(400);
-    }
-
-    await pool.query(`
-      INSERT INTO deliveries 
+    await pool.query(
+      `INSERT INTO deliveries 
       (order_number, driver_name, status, delivery_cost, tracking_url, picked_up_at, delivered_at)
       VALUES ($1,$2,$3,$4,$5,$6,$7)
       ON CONFLICT (order_number)
@@ -150,18 +158,19 @@ app.post('/webhook-shipday', async (req, res) => {
         delivery_cost = EXCLUDED.delivery_cost,
         tracking_url = EXCLUDED.tracking_url,
         picked_up_at = EXCLUDED.picked_up_at,
-        delivered_at = EXCLUDED.delivered_at
-    `, [
-      String(orderNumber), // 🔥 importante como string
-      driverName,
-      data.order_status, // 🔥 usa este también mejor
-      data.order?.delivery_fee,
-      data.trackingUrl,
-      convertirFecha(data.order?.pickedup_time || data.order?.expected_pickup_time),
-      convertirFecha(data.order?.delivery_time || data.order?.expected_delivery_time)
-    ]);
+        delivered_at = EXCLUDED.delivered_at`,
+      [
+        String(orderNumber), // 👈 1
+        driverName,          // 👈 2
+        data.order_status,   // 👈 3
+        data.order ? data.order.delivery_fee : null, // 👈 4
+        data.trackingUrl,    // 👈 5 🔥 IMPORTANTE
+        convertirFecha(data.order ? data.order.pickedup_time : null), // 👈 6
+        convertirFecha(data.order ? data.order.delivery_time : null)  // 👈 7
+      ]
+    );
 
-    console.log("✅ GUARDADO CORRECTO:", orderNumber);
+    console.log("✅ GUARDADO OK");
 
     res.sendStatus(200);
 
