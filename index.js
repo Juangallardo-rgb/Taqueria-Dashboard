@@ -76,49 +76,36 @@ app.post('/webhook-order', async (req, res) => {
 
   const order = req.body;
 
-  console.log("🔥 WOO DATA:", order);
+  console.log("🔥 WOO WEBHOOK:", order);
 
   try {
 
-    // 🧠 NOMBRE CLIENTE
-    const customerName = `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim();
-
-    // 🧠 ITEMS DEL PEDIDO
-    const items = order.line_items?.map(item => ({
-      nombre: item.name,
-      cantidad: item.quantity,
-      precio: item.price
-    })) || [];
-
-    // 🔥 INSERT CON CONTROL DE DUPLICADOS
-    await pool.query(`
-      INSERT INTO pedidos 
-      (restaurante_id, total, estado, woo_order_id, customer_name, items)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      ON CONFLICT (woo_order_id)
-      DO UPDATE SET
-        total = EXCLUDED.total,
-        estado = EXCLUDED.estado,
-        customer_name = EXCLUDED.customer_name,
-        items = EXCLUDED.items
-    `, [
-      1,
-      order.total,
-      order.status,
-      order.id, // 🔥 ID REAL DE WOO
-      customerName,
-      JSON.stringify(items)
-    ]);
-
-    console.log("✅ PEDIDO GUARDADO:", order.id);
+    await pool.query(
+      `INSERT INTO pedidos (restaurante_id, total, estado, woo_order_id, customer_name, items)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (woo_order_id)
+       DO UPDATE SET
+         estado = EXCLUDED.estado,
+         total = EXCLUDED.total`,
+      [
+        1,
+        order.total,
+        order.status, // 🔥 CLAVE
+        order.id,
+        order.billing ? order.billing.first_name + " " + order.billing.last_name : "Cliente",
+        JSON.stringify(order.line_items.map(i => ({
+          nombre: i.name,
+          cantidad: i.quantity
+        })))
+      ]
+    );
 
     res.sendStatus(200);
 
   } catch (error) {
-    console.error("❌ DB ERROR:", error);
+    console.error("❌ ERROR WOO:", error);
     res.sendStatus(500);
   }
-
 });
 
 // ===============================
