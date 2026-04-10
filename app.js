@@ -86,7 +86,7 @@ async function verPedidos(esAuto = false) {
   const contenido = document.getElementById('contenido');
   const contenedor = document.getElementById('contenedor');
 
- if (!esAuto) {
+if (!esAuto) {
   contenido.innerHTML = `
     <div class="tabs">
 
