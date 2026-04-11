@@ -266,18 +266,12 @@ async function verProductos() {
   const contenedor = document.getElementById('contenedor');
 
   // FORMULARIO
-  contenido.innerHTML = `
-    <div class="card">
-      <h2>Crear / Editar Producto</h2>
-      <input id="buscadorProductos" placeholder="🔍 Buscar producto..." oninput="filtrarProductos()" />
-      <input id="nombre" placeholder="Nombre">
-      <input id="precio" placeholder="Precio">
-      <input id="sku" placeholder="SKU">
-      <textarea id="descripcion" placeholder="Descripción"></textarea>
-      <select id="categoria"></select>
-      <button onclick="guardarProducto()">Guardar</button>
-    </div>
-  `;
+ contenido.innerHTML = `
+  <div class="card">
+    <h2>Productos</h2>
+    <input id="buscadorProductos" placeholder="🔍 Buscar producto..." oninput="filtrarProductos()" />
+  </div>
+`;
 
   contenedor.innerHTML = '<p>Cargando productos...</p>';
 
@@ -412,7 +406,7 @@ function renderProductos(lista) {
         <h3>${p.name}</h3>
         <p>$${p.price}</p>
 
-        <button onclick="editarProducto(${p.id})">Editar</button>
+        <button onclick="abrirEditar(${p.id})">Editar</button>
         <button onclick="eliminarProducto(${p.id})">Eliminar</button>
       </div>
     `;
@@ -511,6 +505,57 @@ async function guardarProducto() {
   } catch (error) {
     console.error("❌ ERROR GUARDAR:", error);
     alert("Error guardando producto");
+  }
+}
+
+function abrirEditar(id) {
+
+  const p = productosGlobal.find(p => p.id == id);
+
+  if (!p) return;
+
+  document.getElementById('editNombre').value = p.name || '';
+  document.getElementById('editPrecio').value = p.price || '';
+  document.getElementById('editSku').value = p.sku || '';
+  document.getElementById('editDescripcion').value = p.description || '';
+
+  productoEditando = id;
+
+  document.getElementById('popupEditar').classList.add('active');
+}
+
+function cerrarEditar() {
+  document.getElementById('popupEditar').classList.remove('active');
+}
+
+async function guardarEdicion() {
+
+  const nombre = document.getElementById('editNombre').value;
+  const precio = document.getElementById('editPrecio').value;
+  const sku = document.getElementById('editSku').value;
+  const descripcion = document.getElementById('editDescripcion').value;
+
+  try {
+
+    const res = await fetch(`/products/${productoEditando}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: nombre,
+        regular_price: precio,
+        sku: sku,
+        description: descripcion
+      })
+    });
+
+    if (!res.ok) throw new Error("Error editando");
+
+    cerrarEditar();
+    verProductos();
+
+  } catch (error) {
+    console.error("❌ ERROR EDITAR:", error);
+    alert("Error editando producto");
   }
 }
 // =====================

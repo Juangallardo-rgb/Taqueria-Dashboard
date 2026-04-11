@@ -7,7 +7,25 @@
   <link rel="stylesheet" href="styles.css">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
+<!-- POPUP EDITAR PRODUCTO -->
+<div id="popupEditar" class="popup-soporte">
 
+  <div class="popup-contenido">
+
+    <span class="cerrar" onclick="cerrarEditar()">✖</span>
+
+    <h3>Editar Producto</h3>
+
+    <input id="editNombre" placeholder="Nombre">
+    <input id="editPrecio" placeholder="Precio">
+    <input id="editSku" placeholder="SKU">
+    <textarea id="editDescripcion" placeholder="Descripción"></textarea>
+
+    <button onclick="guardarEdicion()">Guardar cambios</button>
+
+  </div>
+
+</div>
 <body>
 
 <!-- LOGIN -->

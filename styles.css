@@ -454,3 +454,47 @@ input:checked + .slider:before {
   border-radius: 8px;
   border: 1px solid #ddd;
 }
+
+/* ANIMACIÓN POPUP */
+.popup-soporte {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.5);
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+
+  z-index: 1000;
+}
+
+/* ACTIVO */
+.popup-soporte.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* CONTENIDO */
+.popup-contenido {
+  background: white;
+  padding: 25px;
+  border-radius: 12px;
+  width: 320px;
+  text-align: center;
+  position: relative;
+
+  transform: scale(0.8);
+  transition: all 0.3s ease;
+}
+
+/* CUANDO ABRE */
+.popup-soporte.active .popup-contenido {
+  transform: scale(1);
+}
