@@ -375,21 +375,24 @@ function irCorreo() {
 
 function filtrarProductos() {
 
-  const texto = document.getElementById('buscadorProductos').value.toLowerCase();
-  const contenedor = document.getElementById('contenedor');
+  const texto = document.getElementById('buscadorProductos')
+    .value
+    .trim()
+    .toLowerCase();
 
-  const filtrados = productosGlobal.filter(p =>
-    p.name.toLowerCase().includes(texto)
-  );
-
-  contenedor.innerHTML = '';
-
-  if (filtrados.length === 0) {
-    contenedor.innerHTML = "<p>No se encontraron productos</p>";
+  if (!texto) {
+    renderProductos(productosGlobal);
     return;
   }
 
-  renderProductos(data);
+  const filtrados = productosGlobal.filter(p => {
+
+    const nombre = String(p.name || "").toLowerCase();
+
+    return nombre.includes(texto);
+  });
+
+  renderProductos(filtrados);
 }
 
 function renderProductos(lista) {
@@ -456,6 +459,7 @@ async function eliminarProducto(id) {
     renderProductos(productosGlobal);
 
     console.log("✅ Producto eliminado");
+    verProductos(); // recargar lista
 
   } catch (error) {
     console.error("❌ ERROR ELIMINAR:", error);
