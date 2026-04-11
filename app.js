@@ -272,6 +272,7 @@ async function verProductos() {
     <input id="buscadorProductos" placeholder="🔍 Buscar producto..." oninput="filtrarProductos()" />
   </div>
 `;
+  <button onclick="abrirCrear()">➕ Crear Producto</button>
 
   contenedor.innerHTML = '<p>Cargando productos...</p>';
 
@@ -404,7 +405,7 @@ function renderProductos(lista) {
     contenedor.innerHTML += `
       <div class="card">
         <h3>${p.name}</h3>
-        <p>$${p.price}</p>
+        <p>$${p.price || p.regular_price}</p>
 
         <button onclick="abrirEditar(${p.id})">Editar</button>
         <button onclick="eliminarProducto(${p.id})">Eliminar</button>
@@ -509,6 +510,7 @@ async function guardarProducto() {
 }
 
 function abrirEditar(id) {
+  cargarCategoriasPopup();
 
   const p = productosGlobal.find(p => p.id == id);
 
@@ -534,6 +536,7 @@ async function guardarEdicion() {
   const precio = document.getElementById('editPrecio').value;
   const sku = document.getElementById('editSku').value;
   const descripcion = document.getElementById('editDescripcion').value;
+  const categoria = document.getElementById('editCategoria').value;
 
   try {
 
@@ -545,6 +548,7 @@ async function guardarEdicion() {
         regular_price: precio,
         sku: sku,
         description: descripcion
+        categories: [{ id: parseInt(categoria) }]
       })
     });
 
@@ -557,6 +561,39 @@ async function guardarEdicion() {
     console.error("❌ ERROR EDITAR:", error);
     alert("Error editando producto");
   }
+}
+
+function abrirCrear() {
+
+  cargarCategoriasPopup();
+
+  productoEditando = null;
+
+  document.getElementById('editNombre').value = '';
+  document.getElementById('editPrecio').value = '';
+  document.getElementById('editSku').value = '';
+  document.getElementById('editDescripcion').value = '';
+
+  document.getElementById('popupEditar').classList.add('active');
+}
+
+async function cargarCategoriasPopup() {
+
+  const res = await fetch('/categories');
+  const data = await res.json();
+
+  const select = document.getElementById('editCategoria');
+
+  if (!select) return;
+
+  select.innerHTML = '';
+
+  data.forEach(cat => {
+    const option = document.createElement('option');
+    option.value = cat.id;
+    option.textContent = cat.name;
+    select.appendChild(option);
+  });
 }
 // =====================
 // INIT
