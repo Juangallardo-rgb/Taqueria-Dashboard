@@ -424,7 +424,6 @@ function editarProducto(id) {
 
   document.getElementById('nombre').value = producto.name || '';
   document.getElementById('precio').value = producto.price || '';
-  document.getElementById('sku').value = producto.sku || '';
   document.getElementById('descripcion').value = producto.description || '';
 
   // categoría si existe
@@ -466,14 +465,12 @@ async function guardarProducto() {
 
   const nombre = document.getElementById('nombre').value;
   const precio = document.getElementById('precio').value;
-  const sku = document.getElementById('sku').value;
   const descripcion = document.getElementById('descripcion').value;
   const categoria = document.getElementById('categoria').value;
 
   const data = {
     name: nombre,
     regular_price: precio,
-    sku: sku,
     description: descripcion,
     categories: [{ id: parseInt(categoria) }]
   };
@@ -518,7 +515,6 @@ function abrirEditar(id) {
 
   document.getElementById('editNombre').value = p.name || '';
   document.getElementById('editPrecio').value = p.price || '';
-  document.getElementById('editSku').value = p.sku || '';
   document.getElementById('editDescripcion').value = p.description || '';
 
   productoEditando = id;
@@ -534,32 +530,41 @@ async function guardarEdicion() {
 
   const nombre = document.getElementById('editNombre').value;
   const precio = document.getElementById('editPrecio').value;
-  const sku = document.getElementById('editSku').value;
   const descripcion = document.getElementById('editDescripcion').value;
   const categoria = document.getElementById('editCategoria').value;
 
   try {
 
-    const res = await fetch(`/products/${productoEditando}`, {
-      method: 'PUT',
+    let url = '/products';
+    let method = 'POST';
+
+    // 👉 SI ESTÁ EDITANDO
+    if (productoEditando) {
+      url = `/products/${productoEditando}`;
+      method = 'PUT';
+    }
+
+    const res = await fetch(url, {
+      method: method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: nombre,
         regular_price: precio,
-        sku: sku,
         description: descripcion,
         categories: [{ id: parseInt(categoria) }]
       })
     });
 
-    if (!res.ok) throw new Error("Error editando");
+    if (!res.ok) throw new Error("Error guardando");
 
     cerrarEditar();
+    productoEditando = null;
+
     verProductos();
 
   } catch (error) {
-    console.error("❌ ERROR EDITAR:", error);
-    alert("Error editando producto");
+    console.error("❌ ERROR GUARDAR:", error);
+    alert("Error guardando producto");
   }
 }
 
@@ -571,7 +576,6 @@ function abrirCrear() {
 
   document.getElementById('editNombre').value = '';
   document.getElementById('editPrecio').value = '';
-  document.getElementById('editSku').value = '';
   document.getElementById('editDescripcion').value = '';
 
   document.getElementById('popupEditar').classList.add('active');
