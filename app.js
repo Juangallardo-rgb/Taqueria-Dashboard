@@ -269,6 +269,7 @@ async function verProductos() {
   contenido.innerHTML = `
     <div class="card">
       <h2>Crear / Editar Producto</h2>
+      <input id="buscadorProductos" placeholder="🔍 Buscar producto..." oninput="filtrarProductos()" />
       <input id="nombre" placeholder="Nombre">
       <input id="precio" placeholder="Precio">
       <input id="sku" placeholder="SKU">
@@ -380,6 +381,35 @@ function irWhatsApp() {
 
 function irCorreo() {
   window.location.href = "mailto:tualiadodigitalinfo@gmail.com";
+}
+
+function filtrarProductos() {
+
+  const texto = document.getElementById('buscadorProductos').value.toLowerCase();
+  const contenedor = document.getElementById('contenedor');
+
+  const filtrados = productosGlobal.filter(p =>
+    p.name.toLowerCase().includes(texto)
+  );
+
+  contenedor.innerHTML = '';
+
+  if (filtrados.length === 0) {
+    contenedor.innerHTML = "<p>No se encontraron productos</p>";
+    return;
+  }
+
+  filtrados.forEach(p => {
+    contenedor.innerHTML += `
+      <div class="card">
+        <h3>${p.name}</h3>
+        <p>$${p.price}</p>
+
+        <button onclick="editarProducto(${p.id})">Editar</button>
+        <button onclick="eliminarProducto(${p.id})">Eliminar</button>
+      </div>
+    `;
+  });
 }
 
 // =====================

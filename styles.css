@@ -447,3 +447,10 @@ input:checked + .slider:before {
   background: #f97316;
   color: white;
 }
+#buscadorProductos {
+  width: 100%;
+  padding: 10px;
+  margin: 10px 0 15px 0;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+}
