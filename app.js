@@ -305,17 +305,7 @@ async function verProductos() {
 
     contenedor.innerHTML = '';
 
-    data.forEach(p => {
-      contenedor.innerHTML += `
-        <div class="card">
-          <h3>${p.name}</h3>
-          <p>$${p.price}</p>
-
-          <button onclick="editarProducto(${p.id})">Editar</button>
-          <button onclick="eliminarProducto(${p.id})">Eliminar</button>
-        </div>
-      `;
-    });
+    renderProductos(data);
 
   } catch (error) {
     console.error("❌ ERROR PRODUCTOS:", error);
@@ -399,7 +389,21 @@ function filtrarProductos() {
     return;
   }
 
-  filtrados.forEach(p => {
+  renderProductos(data);
+}
+
+function renderProductos(lista) {
+
+  const contenedor = document.getElementById('contenedor');
+
+  contenedor.innerHTML = '';
+
+  if (!lista.length) {
+    contenedor.innerHTML = "<p>No se encontraron productos</p>";
+    return;
+  }
+
+  lista.forEach(p => {
     contenedor.innerHTML += `
       <div class="card">
         <h3>${p.name}</h3>
