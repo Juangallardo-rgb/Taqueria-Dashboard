@@ -270,10 +270,10 @@ async function verProductos() {
   <div class="card">
     <h2>Productos</h2>
     <input id="buscadorProductos" placeholder="🔍 Buscar producto..." oninput="filtrarProductos()" />
+    <button onclick="abrirCrear()">➕ Crear Producto</button>
   </div>
 `;
-  <button onclick="abrirCrear()">➕ Crear Producto</button>
-
+  
   contenedor.innerHTML = '<p>Cargando productos...</p>';
 
   // CATEGORÍAS (NO BLOQUEA)
