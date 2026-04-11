@@ -415,7 +415,100 @@ function renderProductos(lista) {
     `;
   });
 }
+function editarProducto(id) {
 
+  const producto = productosGlobal.find(p => p.id == id);
+
+  if (!producto) {
+    console.log("❌ Producto no encontrado");
+    return;
+  }
+
+  document.getElementById('nombre').value = producto.name || '';
+  document.getElementById('precio').value = producto.price || '';
+  document.getElementById('sku').value = producto.sku || '';
+  document.getElementById('descripcion').value = producto.description || '';
+
+  // categoría si existe
+  if (producto.categories && producto.categories.length > 0) {
+    document.getElementById('categoria').value = producto.categories[0].id;
+  }
+
+  productoEditando = id;
+
+  console.log("✅ Editando producto:", producto);
+}
+
+async function eliminarProducto(id) {
+
+  if (!confirm("¿Eliminar este producto?")) return;
+
+  try {
+    const res = await fetch(`/products/${id}`, {
+      method: 'DELETE'
+    });
+
+    if (!res.ok) throw new Error("Error eliminando");
+
+    // actualizar lista local
+    productosGlobal = productosGlobal.filter(p => p.id != id);
+
+    renderProductos(productosGlobal);
+
+    console.log("✅ Producto eliminado");
+
+  } catch (error) {
+    console.error("❌ ERROR ELIMINAR:", error);
+    alert("Error eliminando producto");
+  }
+}
+
+async function guardarProducto() {
+
+  const nombre = document.getElementById('nombre').value;
+  const precio = document.getElementById('precio').value;
+  const sku = document.getElementById('sku').value;
+  const descripcion = document.getElementById('descripcion').value;
+  const categoria = document.getElementById('categoria').value;
+
+  const data = {
+    name: nombre,
+    regular_price: precio,
+    sku: sku,
+    description: descripcion,
+    categories: [{ id: parseInt(categoria) }]
+  };
+
+  try {
+
+    let url = '/products';
+    let method = 'POST';
+
+    // 🔥 SI ESTÁ EDITANDO
+    if (productoEditando) {
+      url = `/products/${productoEditando}`;
+      method = 'PUT';
+    }
+
+    const res = await fetch(url, {
+      method: method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+
+    if (!res.ok) throw new Error("Error guardando");
+
+    productoEditando = null;
+
+    verProductos(); // recargar lista
+
+    console.log("✅ Producto guardado");
+
+  } catch (error) {
+    console.error("❌ ERROR GUARDAR:", error);
+    alert("Error guardando producto");
+  }
+}
 // =====================
 // INIT
 // =====================
