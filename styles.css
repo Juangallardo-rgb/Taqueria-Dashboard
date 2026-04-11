@@ -368,17 +368,25 @@ input:checked + .slider:before {
   right: 20px;
   background: #25D366;
   color: white;
-  font-size: 24px;
-  padding: 15px;
-  border-radius: 50%;
+  font-size: 14px;
+  padding: 10px 14px;
+  border-radius: 30px;
   cursor: pointer;
   box-shadow: 0 4px 15px rgba(0,0,0,0.2);
   z-index: 999;
-  transition: transform 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: bold;
+  transition: all 0.2s;
 }
 
 .soporte-float:hover {
-  transform: scale(1.1);
+  transform: scale(1.05);
+}
+
+.soporte-float span {
+  font-size: 13px;
 }
 
 .popup-soporte {
