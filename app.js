@@ -405,7 +405,7 @@ function renderProductos(lista) {
     contenedor.innerHTML += `
       <div class="card">
         <h3>${p.name}</h3>
-        <p>$${p.price || p.regular_price}</p>
+        <p>$${parseFloat(p.regular_price || p.price).toFixed(2)}</p>
 
         <button onclick="abrirEditar(${p.id})">Editar</button>
         <button onclick="eliminarProducto(${p.id})">Eliminar</button>
