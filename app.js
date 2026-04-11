@@ -285,7 +285,7 @@ async function verProductos() {
 
   // PRODUCTOS
   try {
-    const res = await fetch('/products');
+    const res = await fetch('/products?ts=' + Date.now());
 
     if (!res.ok) throw new Error("Error products");
 
@@ -405,7 +405,7 @@ function renderProductos(lista) {
     contenedor.innerHTML += `
       <div class="card">
         <h3>${p.name}</h3>
-        <p>$${p.regular_price || p.price}</p>
+        <p>$${parseFloat(p.price || p.regular_price).toFixed(2)}</p>
 
         <button onclick="abrirEditar(${p.id})">Editar</button>
         <button onclick="eliminarProducto(${p.id})">Eliminar</button>
