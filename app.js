@@ -547,7 +547,7 @@ async function guardarEdicion() {
         name: nombre,
         regular_price: precio,
         sku: sku,
-        description: descripcion
+        description: descripcion,
         categories: [{ id: parseInt(categoria) }]
       })
     });
