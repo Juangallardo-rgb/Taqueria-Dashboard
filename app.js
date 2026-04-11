@@ -365,13 +365,24 @@ function cambiarTab(tab) {
   verPedidos();
 }
 
+function abrirSoporte() {
+  document.getElementById('popupSoporte').style.display = 'flex';
+}
+
+function cerrarSoporte() {
+  document.getElementById('popupSoporte').style.display = 'none';
+}
+
+function irWhatsApp() {
+  const mensaje = encodeURIComponent("Hola, necesito ayuda con DENIX 🚀");
+  window.open(`https://wa.me/14437617813?text=${mensaje}`, '_blank');
+}
+
+function irCorreo() {
+  window.location.href = "mailto:tualiadodigitalinfo@gmail.com";
+}
 
 // =====================
 // INIT
 // =====================
 mostrarInicio();
-
-function irSoporte() {
-  const mensaje = encodeURIComponent("Hola, necesito soporte con DENIX 🚀");
-  window.open(`https://wa.me/14437617813?text=${mensaje}`, '_blank');
-}

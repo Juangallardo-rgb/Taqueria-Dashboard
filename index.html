@@ -52,7 +52,6 @@
         <button onclick="mostrarInicio()">🏠 Inicio</button>
         <button onclick="verPedidos()">📦 Pedidos</button>
         <button onclick="verProductos()">🛒 Productos</button>
-        <button onclick="irSoporte()">🎧 Soporte</button>
       </div>
     </div>
 
@@ -71,6 +70,37 @@
     <div id="contenido"></div>
 
     <div class="grid" id="contenedor"></div>
+
+  </div>
+
+</div>
+<!-- BOTON SOPORTE -->
+<div class="soporte-float" onclick="abrirSoporte()">
+  🎧
+</div>
+<!-- POPUP SOPORTE -->
+<div id="popupSoporte" class="popup-soporte">
+
+  <div class="popup-contenido">
+
+    <span class="cerrar" onclick="cerrarSoporte()">✖</span>
+
+    <p>
+      Hola 👋 Somos el equipo de soporte de DENIX<br><br>
+
+      ¿Tienes algún problema o necesitas ayuda con nuestro servicio?<br>
+      Estamos aquí para ayudarte 💪<br><br>
+
+      Puedes escribirnos directamente por WhatsApp para una atención más rápida,
+      o enviarnos un correo y te responderemos lo antes posible.<br><br>
+
+      🚀 Tu negocio no se detiene, y nosotros tampoco.
+    </p>
+
+    <div class="acciones">
+      <button onclick="irWhatsApp()">WhatsApp</button>
+      <button onclick="irCorreo()">Correo</button>
+    </div>
 
   </div>
 
