@@ -439,6 +439,11 @@ function renderProductos(lista) {
       <div class="card">
         <h3>${p.name}</h3>
         <p>$${parseFloat(p.price || p.regular_price).toFixed(2)}</p>
+        <p>
+         ${p.stock_status === 'instock' 
+        ? '🟢 Disponible' 
+        : '🔴 No disponible'}
+        </p>
 
         <button onclick="abrirEditar(${p.id})">Editar</button>
         <button onclick="eliminarProducto(${p.id})">Eliminar</button>
@@ -549,6 +554,7 @@ function abrirEditar(id) {
   document.getElementById('editNombre').value = p.name || '';
   document.getElementById('editPrecio').value = p.price || '';
   document.getElementById('editDescripcion').value = p.description || '';
+  document.getElementById('editStock').value = producto.stock_status || 'instock';
 
   productoEditando = id;
 
@@ -565,6 +571,7 @@ async function guardarEdicion() {
   const precio = document.getElementById('editPrecio').value;
   const descripcion = document.getElementById('editDescripcion').value;
   const categoria = document.getElementById('editCategoria').value;
+  const stock = document.getElementById('editStock').value;
 
   try {
 
@@ -584,7 +591,8 @@ async function guardarEdicion() {
         name: nombre,
         regular_price: precio,
         description: descripcion,
-        categories: [{ id: parseInt(categoria) }]
+        categories: [{ id: parseInt(categoria) }],
+        stock_status: stock
       })
     });
 
