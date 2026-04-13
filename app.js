@@ -99,7 +99,12 @@ async function mostrarInicio() {
         <p id="ventasMes">$0</p>
       </div>
 
+      <div class="card">
+        <h3>📈 Órdenes últimos 7 días</h3>
+      <canvas id="graficoOrdenes"></canvas>
+      </div>
     </div>
+
   `;
 
   contenedor.innerHTML = '';
@@ -693,8 +698,74 @@ async function cargarMetricas() {
   } catch (error) {
     console.error("Error métricas:", error);
   }
+  renderGraficoOrdenes(data);
 }
+function renderGraficoOrdenes(data) {
 
+  const ctx = document.getElementById('graficoOrdenes');
+
+  if (!ctx) return;
+
+  const hoy = new Date();
+
+  // 🔥 crear últimos 7 días
+  const dias = [];
+  const conteo = {};
+
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(hoy.getDate() - i);
+
+    const key = d.toLocaleDateString();
+    dias.push(key);
+    conteo[key] = 0;
+  }
+
+  // 🔥 contar órdenes
+  data.forEach(p => {
+
+    if (p.estado !== 'processing' && p.estado !== 'completed') return;
+
+    const fecha = new Date(p.created_at);
+    const key = fecha.toLocaleDateString();
+
+    if (conteo[key] !== undefined) {
+      conteo[key]++;
+    }
+
+  });
+
+  const valores = dias.map(d => conteo[d]);
+
+  // 🔥 limpiar gráfico anterior si existe
+  if (window.graficoOrdenes) {
+    window.graficoOrdenes.destroy();
+  }
+
+  window.graficoOrdenes = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: dias,
+      datasets: [{
+        label: 'Órdenes',
+        data: valores,
+        tension: 0.4, // 🔥 curva suave
+        fill: true,
+        borderWidth: 3,     // 🔥 grosor de la línea
+        pointRadius: 4,      // 🔥 tamaño de los puntos
+        pointBackgroundColor: '#f97316',
+        borderColor: '#f97316',
+        backgroundColor: 'rgba(249, 115, 22, 0.2)'
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false }
+      }
+    }
+  });
+}
 // =====================
 // INIT
 // =====================
