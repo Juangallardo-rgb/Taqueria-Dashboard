@@ -106,6 +106,7 @@ app.post('/webhook-order', async (req, res) => {
     console.error("❌ ERROR WOO:", error);
     res.sendStatus(500);
   }
+  console.log("🔥 PEDIDO RECIBIDO:", new Date());
 });
 
 // ===============================
@@ -165,7 +166,7 @@ app.post('/webhook-shipday', async (req, res) => {
     console.error("❌ ERROR SHIPDAY:", error);
     res.sendStatus(500);
   }
-
+console.log("🚚 SHIPDAY RECIBIDO:", new Date());
 });
 
 

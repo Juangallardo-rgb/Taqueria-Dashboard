@@ -124,7 +124,9 @@ async function verPedidos(esAuto = false) {
 
     // filtros
     if (tabActual === 'recientes') {
-      pedidosFiltrados = data.filter(p => p.estado === 'processing');
+      pedidosFiltrados = data.filter(p =>
+  p.estado === 'processing' || p.estado === 'pending'
+    );
     }
 
     if (tabActual === 'hoy') {
@@ -239,7 +241,7 @@ setInterval(() => {
   if (window.viendoPedidos) {
     verPedidos(true);
   }
-}, 5000);
+}, 2000);
 
 
 // =====================
