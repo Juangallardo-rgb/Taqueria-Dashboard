@@ -519,12 +519,20 @@ input:checked + .slider:before {
   }
 
   .menu {
+    display: flex;
+    flex-direction: column; /* 🔥 CLAVE */
     width: 100%;
+    margin-top: 20px;
   }
 
   .menu button {
     width: 100%;
-    margin-bottom: 8px;
+    text-align: left;
+    padding: 12px 15px;
+    margin-bottom: 10px;
+
+    border-radius: 10px;
+    font-size: 15px;
   }
 
   .logout {
