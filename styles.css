@@ -720,3 +720,11 @@ body {
   font-size: 20px;
   font-weight: bold;
 }
+
+#graficoOrdenes {
+  height: 250px !important;
+}
+
+.card canvas {
+  max-height: 250px;
+}
