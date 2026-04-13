@@ -710,84 +710,10 @@ async function cargarMetricas() {
   }
   renderGraficoOrdenes(data);
 }
-function renderGraficoOrdenes(data) {
+const canvas = document.getElementById('graficoOrdenes');
+if (!canvas) return;
 
-  const ctx = document.getElementById('graficoOrdenes');
-
-  if (!ctx) return;
-
-  const hoy = new Date();
-
-  // 🔥 crear últimos 7 días
-  const dias = [];
-  const conteo = {};
-
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(hoy.getDate() - i);
-
-    const key = d.toLocaleDateString();
-    dias.push(key);
-    conteo[key] = 0;
-  }
-
-  // 🔥 contar órdenes
-  data.forEach(p => {
-
-    if (p.estado !== 'processing' && p.estado !== 'completed') return;
-
-    const fecha = new Date(p.created_at);
-    const key = fecha.toLocaleDateString();
-
-    if (conteo[key] !== undefined) {
-      conteo[key]++;
-    }
-
-  });
-
-  const valores = dias.map(d => conteo[d]);
-
-  // 🔥 limpiar gráfico anterior si existe
-  if (window.graficoOrdenes) {
-    window.graficoOrdenes.destroy();
-  }
-
-  window.graficoOrdenes = new Chart(ctx, {
-  type: 'line',
-  data: {
-    labels: dias,
-    datasets: [{
-      data: valores,
-
-      borderColor: '#f97316',
-      backgroundColor: 'rgba(249, 115, 22, 0.2)',
-
-      tension: 0.4,
-      fill: true,
-
-      borderWidth: 3,
-      pointRadius: 4
-    }]
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false, // 🔥 CLAVE
-
-    plugins: {
-      legend: { display: false }
-    },
-
-    scales: {
-      y: {
-        beginAtZero: true,
-        ticks: {
-          stepSize: 1 // 🔥 importante para órdenes
-        }
-      }
-    }
-  }
-});
-}
+const ctx = canvas.getContext('2d');
 // =====================
 // INIT
 // =====================
