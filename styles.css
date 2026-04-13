@@ -634,61 +634,65 @@ body {
 
     display: flex;
     flex-direction: column;
-    justify-content: space-between; /* 🔥 CLAVE */
-
-    padding: 20px;
 
     background: white;
     z-index: 999;
     transition: 0.3s;
+
+    padding: 20px;
   }
 
   .sidebar.active {
     left: 0;
   }
 
-  /* TOP */
+  /* 🔥 CLAVE */
   .sidebar-top {
+    flex: 1; /* ocupa todo el espacio disponible */
     display: flex;
     flex-direction: column;
     align-items: center;
   }
 
+  /* LOGO */
   .business-logo img {
-    width: 100px;
-    margin-bottom: 15px;
+    width: 120px;
+    margin-bottom: 20px;
   }
 
+  /* SWITCH */
   .switch-container {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
     width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
   }
 
   /* MENU */
   .menu {
+    width: 100%;
     display: flex;
     flex-direction: column;
     gap: 12px;
-    margin-top: 20px;
   }
 
   .menu button {
     width: 100%;
-    text-align: left;
     padding: 12px;
     border-radius: 10px;
+    text-align: left;
   }
 
-  /* LOGOUT ABAJO */
+  /* 🔥 LOGOUT ABAJO SIEMPRE */
   .logout {
     width: 100%;
-    margin-top: 20px;
     background: #f97316;
     color: white;
-    padding: 12px;
-    border-radius: 10px;
+    padding: 14px;
+    border-radius: 12px;
+
+    margin-top: auto; /* 🔥 ESTO LO BAJA */
   }
 
 }
