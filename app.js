@@ -701,6 +701,7 @@ async function cargarMetricas() {
     console.error("Error métricas:", error);
   }
 }
+
 function renderGraficoOrdenes(data) {
 
   const canvas = document.getElementById('graficoOrdenes');
