@@ -257,7 +257,6 @@ app.post('/products', async (req, res) => {
   }
 });
 
-
 // ✏️ EDITAR PRODUCTO
 app.put('/products/:id', async (req, res) => {
   try {

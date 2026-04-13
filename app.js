@@ -352,11 +352,11 @@ function cambiarTab(tab) {
 }
 
 function abrirSoporte() {
-  document.getElementById('popupSoporte').style.display = 'flex';
+  document.getElementById('popupSoporte').classList.add('active');
 }
 
 function cerrarSoporte() {
-  document.getElementById('popupSoporte').style.display = 'none';
+  document.getElementById('popupSoporte').classList.remove('active');
 }
 
 function irWhatsApp() {
