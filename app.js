@@ -76,48 +76,43 @@ async function mostrarInicio() {
   const contenido = document.getElementById('contenido');
   const contenedor = document.getElementById('contenedor');
 
- contenido.innerHTML = `
-  <div class="dashboard-metricas">
+  contenido.innerHTML = `
+    <div class="dashboard-metricas">
 
-    <div class="card-metrica">
-      <h4>🧾 Órdenes Hoy</h4>
-      <p id="ordenesHoy">0</p>
+      <div class="card-metrica">
+        <h4>🧾 Órdenes Hoy</h4>
+        <p id="ordenesHoy">0</p>
+      </div>
+
+      <div class="card-metrica">
+        <h4>💰 Ventas Hoy</h4>
+        <p id="ventasHoy">$0</p>
+      </div>
+
+      <div class="card-metrica">
+        <h4>📅 Órdenes Mes</h4>
+        <p id="ordenesMes">0</p>
+      </div>
+
+      <div class="card-metrica">
+        <h4>💵 Ventas Mes</h4>
+        <p id="ventasMes">$0</p>
+      </div>
+
     </div>
 
-    <div class="card-metrica">
-      <h4>💰 Ventas Hoy</h4>
-      <p id="ventasHoy">$0</p>
+    <div class="card card-grafico">
+      <h3>📊 Órdenes últimos 7 días</h3>
+      <div class="grafico-container">
+        <canvas id="graficoOrdenes"></canvas>
+      </div>
     </div>
-
-    <div class="card-metrica">
-      <h4>📅 Órdenes Mes</h4>
-      <p id="ordenesMes">0</p>
-    </div>
-
-    <div class="card-metrica">
-      <h4>💵 Ventas Mes</h4>
-      <p id="ventasMes">$0</p>
-    </div>
-
-  </div>
-
-  <div class="card card-grafico">
-    <h3>📊 Órdenes últimos 7 días</h3>
-    <div class="grafico-container">
-      <canvas id="graficoOrdenes"></canvas>
-    </div>
-  </div>
-`;
+  `;
 
   contenedor.innerHTML = '';
 
-  setTimeout(() => {
-  cargarMetricas();
-}, 100);
+  await cargarMetricas(); // 🔥 SOLO UNA VEZ
   await cargarEstadoRestaurante();
-  setTimeout(() => {
-  cargarMetricas();
-}, 50);
 }
 
 
@@ -673,19 +668,16 @@ async function cargarMetricas() {
 
     data.forEach(p => {
 
-      // 🔥 SOLO PEDIDOS VALIDOS
       if (p.estado !== 'processing' && p.estado !== 'completed') return;
 
       const fecha = new Date(p.created_at);
       const total = Number(p.total) || 0;
 
-      // 🔥 HOY
       if (fecha.toDateString() === hoy.toDateString()) {
         ordenesHoy++;
         ventasHoy += total;
       }
 
-      // 🔥 MES (AÑO INCLUIDO)
       if (
         fecha.getMonth() === hoy.getMonth() &&
         fecha.getFullYear() === hoy.getFullYear()
@@ -696,16 +688,18 @@ async function cargarMetricas() {
 
     });
 
-    // 🔥 UI
+    // UI
     document.getElementById('ordenesHoy').innerText = ordenesHoy;
     document.getElementById('ventasHoy').innerText = `$${ventasHoy.toFixed(2)}`;
     document.getElementById('ordenesMes').innerText = ordenesMes;
     document.getElementById('ventasMes').innerText = `$${ventasMes.toFixed(2)}`;
 
+    // 🔥 EL GRÁFICO VA AQUÍ (DENTRO DEL TRY)
+    renderGraficoOrdenes(data);
+
   } catch (error) {
     console.error("Error métricas:", error);
   }
-  renderGraficoOrdenes(data);
 }
 function renderGraficoOrdenes(data) {
 
