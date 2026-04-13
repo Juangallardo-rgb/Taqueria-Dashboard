@@ -7,31 +7,11 @@
   <link rel="stylesheet" href="styles.css">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<!-- POPUP EDITAR PRODUCTO -->
-<div id="popupEditar" class="popup-soporte">
-
-  <div class="popup-contenido">
-
-    <span class="cerrar" onclick="cerrarEditar()">✖</span>
-
-    <h3>Editar Producto</h3>
-
-    <input id="editNombre" placeholder="Nombre">
-    <input id="editPrecio" placeholder="Precio">
-    <textarea id="editDescripcion" placeholder="Descripción"></textarea>
-    <select id="editCategoria"></select>
-
-    <button onclick="guardarEdicion()">Guardar cambios</button>
-
-  </div>
-
-</div>
 
 <body>
 
 <!-- LOGIN -->
 <div id="loginScreen" class="login-container">
-
   <div class="login-box">
     <img src="logoDenix.png" class="logo-login">
 
@@ -43,37 +23,40 @@
 
     <button onclick="login()">Ingresar</button>
   </div>
-
 </div>
 
 <!-- DASHBOARD -->
 <div class="app" id="dashboard" style="display:none;">
-<div class="card">
-</div>
 
   <!-- SIDEBAR -->
   <div class="sidebar">
-    
-    <div>
+
+    <!-- TOP -->
+    <div class="sidebar-top">
+
       <div class="business-logo">
         <img src="labonita.png">
       </div>
-    <div class="switch-container">
-  <span id="estadoTexto">Cargando...</span>
 
-  <label class="switch">
-    <input type="checkbox" id="switchRestaurante" onchange="toggleRestaurante()">
-    <span class="slider"></span>
-  </label>
-</div>
+      <div class="switch-container">
+        <span id="estadoTexto">Cargando...</span>
 
+        <label class="switch">
+          <input type="checkbox" id="switchRestaurante" onchange="toggleRestaurante()">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <!-- MENU -->
       <div class="menu">
         <button onclick="mostrarInicio()">🏠 Inicio</button>
         <button onclick="verPedidos()">📦 Pedidos</button>
         <button onclick="verProductos()">🛒 Productos</button>
       </div>
+
     </div>
 
+    <!-- LOGOUT -->
     <button class="logout" onclick="logout()">Cerrar sesión</button>
 
   </div>
@@ -82,11 +65,11 @@
   <div class="main">
 
     <div class="topbar">
+      <div class="hamburger" onclick="toggleMenu()">☰</div>
+
       <h2 id="tituloPagina">Dashboard</h2>
+
       <img src="logoDenix.png" class="logo-denix">
-      <div class="hamburger" onclick="toggleMenu()">
-  ☰
-</div>
     </div>
 
     <div id="contenido"></div>
@@ -96,14 +79,15 @@
   </div>
 
 </div>
-<!-- BOTON SOPORTE -->
+
+<!-- BOTÓN SOPORTE -->
 <div class="soporte-float" onclick="abrirSoporte()">
   💻
   <span>Soporte</span>
 </div>
+
 <!-- POPUP SOPORTE -->
 <div id="popupSoporte" class="popup-soporte">
-
   <div class="popup-contenido">
 
     <span class="cerrar" onclick="cerrarSoporte()">✖</span>
@@ -126,10 +110,30 @@
     </div>
 
   </div>
-
 </div>
 
-<script defer src="app.js"></script>
+<!-- POPUP EDITAR PRODUCTO -->
+<div id="popupEditar" class="popup-soporte">
+  <div class="popup-contenido">
+
+    <span class="cerrar" onclick="cerrarEditar()">✖</span>
+
+    <h3>Editar Producto</h3>
+
+    <input id="editNombre" placeholder="Nombre">
+    <input id="editPrecio" placeholder="Precio">
+    <textarea id="editDescripcion" placeholder="Descripción"></textarea>
+    <select id="editCategoria"></select>
+
+    <button onclick="guardarEdicion()">Guardar cambios</button>
+
+  </div>
+</div>
+
+<!-- OVERLAY -->
 <div id="overlay" onclick="toggleMenu()"></div>
+
+<script defer src="app.js"></script>
+
 </body>
 </html>
