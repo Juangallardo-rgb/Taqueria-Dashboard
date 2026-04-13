@@ -118,6 +118,9 @@ async function mostrarInicio() {
   cargarMetricas();
 }, 100);
   await cargarEstadoRestaurante();
+  setTimeout(() => {
+  cargarMetricas();
+}, 50);
 }
 
 
