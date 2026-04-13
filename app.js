@@ -714,14 +714,12 @@ function renderGraficoOrdenes(data) {
   const labels = [];
   const valores = [];
 
-  // 🔥 últimos 7 días
   for (let i = 6; i >= 0; i--) {
 
     const d = new Date();
     d.setDate(hoy.getDate() - i);
 
-    const dia = d.getDate(); // solo número del día
-    labels.push(dia);
+    labels.push(d.getDate());
 
     let count = 0;
 
@@ -731,11 +729,10 @@ function renderGraficoOrdenes(data) {
 
       const fecha = new Date(p.created_at);
 
-      if (
-        fecha.getDate() === d.getDate() &&
-        fecha.getMonth() === d.getMonth() &&
-        fecha.getFullYear() === d.getFullYear()
-      ) {
+      const keyFecha = fecha.toISOString().split('T')[0];
+      const keyDia = d.toISOString().split('T')[0];
+
+      if (keyFecha === keyDia) {
         count++;
       }
 
@@ -749,9 +746,9 @@ function renderGraficoOrdenes(data) {
   }
 
   window.graficoOrdenes = new Chart(ctx, {
-    type: 'bar', // 🔥 BARRAS
+    type: 'bar',
     data: {
-      labels: labels,
+      labels,
       datasets: [{
         data: valores,
         backgroundColor: '#f97316'
@@ -766,9 +763,7 @@ function renderGraficoOrdenes(data) {
       scales: {
         y: {
           beginAtZero: true,
-          ticks: {
-            stepSize: 1
-          }
+          ticks: { stepSize: 1 }
         }
       }
     }
