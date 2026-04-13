@@ -114,7 +114,9 @@ async function mostrarInicio() {
 
   contenedor.innerHTML = '';
 
-  await cargarMetricas();
+  setTimeout(() => {
+  cargarMetricas();
+}, 100);
   await cargarEstadoRestaurante();
 }
 
