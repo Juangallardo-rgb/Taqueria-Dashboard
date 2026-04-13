@@ -711,7 +711,7 @@ async function cargarMetricas() {
   renderGraficoOrdenes(data);
 }
 function renderGraficoOrdenes(data) {
-
+  console.log("🔥 renderGraficoOrdenes RUNNING");
   const canvas = document.getElementById('graficoOrdenes');
   if (!canvas) return;
 
@@ -719,31 +719,30 @@ function renderGraficoOrdenes(data) {
 
   const hoy = new Date();
 
-  const dias = [];
-  const conteo = {};
+ const dias = [];
+const conteo = {};
 
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(hoy.getDate() - i);
+for (let i = 6; i >= 0; i--) {
+  const d = new Date();
+  d.setDate(hoy.getDate() - i);
 
-    const key = d.toLocaleDateString();
-    dias.push(key);
-    conteo[key] = 0;
+  const key = d.toISOString().split('T')[0]; // 🔥 FIX
+  dias.push(key);
+  conteo[key] = 0;
+}
+
+data.forEach(p => {
+
+  if (p.estado !== 'processing' && p.estado !== 'completed') return;
+
+  const fecha = new Date(p.created_at);
+  const key = fecha.toISOString().split('T')[0]; // 🔥 FIX
+
+  if (conteo[key] !== undefined) {
+    conteo[key]++;
   }
 
-  data.forEach(p => {
-
-    if (p.estado !== 'processing' && p.estado !== 'completed') return;
-
-    const fecha = new Date(p.created_at);
-    const key = fecha.toLocaleDateString();
-
-    if (conteo[key] !== undefined) {
-      conteo[key]++;
-    }
-
-  });
-
+});
   const valores = dias.map(d => conteo[d]);
 
   if (window.graficoOrdenes) {
