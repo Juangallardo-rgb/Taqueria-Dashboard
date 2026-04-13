@@ -728,3 +728,13 @@ body {
 .card canvas {
   max-height: 250px;
 }
+
+.card-grafico {
+  margin-top: 20px;
+}
+
+.grafico-container {
+  position: relative;
+  width: 100%;
+  height: 300px; /* 🔥 CLAVE */
+}

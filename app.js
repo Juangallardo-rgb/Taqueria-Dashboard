@@ -76,36 +76,41 @@ async function mostrarInicio() {
   const contenido = document.getElementById('contenido');
   const contenedor = document.getElementById('contenedor');
 
-  contenido.innerHTML = `
-    <div class="dashboard-metricas">
+ contenido.innerHTML = `
+  <div class="dashboard-metricas">
 
-      <div class="card-metrica">
-        <h4>🧾 Órdenes Hoy</h4>
-        <p id="ordenesHoy">0</p>
-      </div>
-
-      <div class="card-metrica">
-        <h4>💰 Ventas Hoy</h4>
-        <p id="ventasHoy">$0</p>
-      </div>
-
-      <div class="card-metrica">
-        <h4>📅 Órdenes Mes</h4>
-        <p id="ordenesMes">0</p>
-      </div>
-
-      <div class="card-metrica">
-        <h4>💵 Ventas Mes</h4>
-        <p id="ventasMes">$0</p>
-      </div>
-
-      <div class="card">
-        <h3>📈 Órdenes últimos 7 días</h3>
-      <canvas id="graficoOrdenes"></canvas>
-      </div>
+    <div class="card-metrica">
+      <h4>🧾 Órdenes Hoy</h4>
+      <p id="ordenesHoy">0</p>
     </div>
 
-  `;
+    <div class="card-metrica">
+      <h4>💰 Ventas Hoy</h4>
+      <p id="ventasHoy">$0</p>
+    </div>
+
+    <div class="card-metrica">
+      <h4>📅 Órdenes Mes</h4>
+      <p id="ordenesMes">0</p>
+    </div>
+
+    <div class="card-metrica">
+      <h4>💵 Ventas Mes</h4>
+      <p id="ventasMes">$0</p>
+    </div>
+
+  </div>
+
+  <!-- 🔥 GRAFICO ABAJO -->
+  <div class="card card-grafico">
+    <h3>📈 Órdenes últimos 7 días</h3>
+
+    <div class="grafico-container">
+      <canvas id="graficoOrdenes"></canvas>
+    </div>
+
+  </div>
+`;
 
   contenedor.innerHTML = '';
 
@@ -743,29 +748,40 @@ function renderGraficoOrdenes(data) {
   }
 
   window.graficoOrdenes = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: dias,
-      datasets: [{
-        label: 'Órdenes',
-        data: valores,
-        tension: 0.4, // 🔥 curva suave
-        fill: true,
-        borderWidth: 3,     // 🔥 grosor de la línea
-        pointRadius: 4,      // 🔥 tamaño de los puntos
-        pointBackgroundColor: '#f97316',
-        borderColor: '#f97316',
-        backgroundColor: 'rgba(249, 115, 22, 0.2)'
-      }]
+  type: 'line',
+  data: {
+    labels: dias,
+    datasets: [{
+      data: valores,
+
+      borderColor: '#f97316',
+      backgroundColor: 'rgba(249, 115, 22, 0.2)',
+
+      tension: 0.4,
+      fill: true,
+
+      borderWidth: 3,
+      pointRadius: 4
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false, // 🔥 CLAVE
+
+    plugins: {
+      legend: { display: false }
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false }
+
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: {
+          stepSize: 1 // 🔥 importante para órdenes
+        }
       }
     }
-  });
+  }
+});
 }
 // =====================
 // INIT
