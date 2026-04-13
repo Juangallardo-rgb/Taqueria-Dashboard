@@ -7,8 +7,7 @@ body {
   font-family: "Segoe UI", sans-serif;
   background: #f8fafc;
   color: #0f172a;
-  -webkit-tap-highlight-color: transparent;
-  overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
 }
 
 /* LOGIN */
@@ -21,51 +20,65 @@ body {
 
 .login-box {
   background: white;
-  padding: 30px;
-  border-radius: 12px;
-  width: 300px;
+  padding: 40px;
+  border-radius: 16px;
+  width: 320px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.08);
   text-align: center;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
 }
 
-.logo-login {
+.logo {
   width: 80px;
-  margin-bottom: 10px;
+  margin-bottom: -25px;
 }
 
-/* INPUTS */
 input, textarea, select {
   width: 100%;
-  padding: 10px;
+  padding: 12px;
   margin-top: 10px;
   border-radius: 8px;
   border: 1px solid #ddd;
+  font-size: 14px;
 }
 
-/* BOTONES */
+/* BOTONES BASE */
 button {
-  padding: 10px;
+  padding: 10px 12px;
   border-radius: 8px;
   border: none;
   cursor: pointer;
   font-weight: bold;
 }
 
-/* MENU */
-.menu {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
+/* BOTONES MENU */
 .menu button {
   width: 100%;
   background: #e2e8f0;
+  color: #0f172a;
+  margin-top: 10px;
   text-align: left;
 }
 
 .menu button:hover {
   background: #f97316;
+}
+
+/* BOTON GUARDAR */
+button[onclick="guardarProducto()"] {
+  background: #22c55e;
+  color: white;
+  margin-top: 15px;
+}
+
+/* BOTONES CRUD */
+button[onclick*="editarProducto"] {
+  background: #260db0;
+  color: white;
+  margin-right: 5px;
+}
+
+button[onclick*="eliminarProducto"] {
+  background: #ef4444;
   color: white;
 }
 
@@ -73,7 +86,6 @@ button {
 .logout {
   background: #f97316;
   color: white;
-  margin-top: auto;
 }
 
 /* APP */
@@ -89,13 +101,14 @@ button {
   padding: 20px;
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
   border-right: 1px solid #eee;
 }
 
 .business-logo img {
   width: 120px;
-  margin: auto;
   display: block;
+  margin: auto;
 }
 
 /* MAIN */
@@ -130,51 +143,307 @@ button {
   box-shadow: 0 5px 20px rgba(0,0,0,0.05);
 }
 
-/* METRICAS */
-.dashboard-metricas {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 15px;
+/* RESPONSIVE */
+@media (max-width: 900px) {
+  .app {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    height: auto;
+    flex-direction: row;
+  }
 }
 
-.card-metrica {
-  background: white;
-  padding: 15px;
-  border-radius: 12px;
-  text-align: center;
+/* ================= MOBILE APP MODE ================= */
+@media (max-width: 768px) {
+
+  body {
+    overflow-x: hidden;
+  }
+
+  .app {
+    flex-direction: column;
+  }
+
+  /* SIDEBAR → BOTTOM NAV */
+  .sidebar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 70px;
+    flex-direction: row;
+    justify-content: space-around;
+    align-items: center;
+    border-top: 1px solid #ddd;
+    z-index: 1000;
+  }
+
+  .business-logo {
+    display: none;
+  }
+
+  .menu {
+    display: flex;
+    width: 100%;
+    justify-content: space-around;
+  }
+
+  .menu button {
+    flex: 1;
+    margin: 0 5px;
+    font-size: 12px;
+    padding: 10px;
+  }
+
+  .logout {
+    display: none;
+  }
+
+  /* MAIN */
+  .main {
+    padding: 15px;
+    padding-bottom: 90px; /* espacio para navbar */
+  }
+
+  /* TOPBAR */
+  .topbar {
+    flex-direction: row;
+    justify-content: space-between;
+  }
+
+  .logo-denix {
+    width: 40px;
+  }
+
+  /* GRID */
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* CARD */
+  .card {
+    width: 100%;
+  }
+
 }
 
-.card-metrica p {
-  font-size: 20px;
+/* SWITCH CONTAINER */
+.switch-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 15px 0 25px;
+}
+
+/* TEXTO */
+#estadoTexto {
+  font-size: 14px;
   font-weight: bold;
 }
 
-/* GRAFICO */
-.grafico-container {
-  width: 100%;
-  height: 250px;
-}
-
 /* SWITCH */
-.switch-container {
-  display: flex;
-  justify-content: space-between;
-  margin: 15px 0;
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 26px;
 }
 
-/* SOPORTE */
+.switch input {
+  display: none;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  background-color: #ccc;
+  border-radius: 34px;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  transition: 0.3s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  border-radius: 50%;
+  transition: 0.3s;
+}
+
+/* ACTIVO */
+input:checked + .slider {
+  background-color: #22c55e;
+}
+
+input:checked + .slider:before {
+  transform: translateX(24px);
+}
+
+.card.nuevo {
+  border: 2px solid #22c55e;
+  background: #f0fdf4;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+  100% { transform: scale(1); }
+}
+
+.tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.tab {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  background: #f3f4f6;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.tab.active {
+  background: #f97316;
+  color: white;
+}
+
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  background: #f9fafb;
+}
+
+.login-box {
+  background: white;
+  padding: 30px;
+  border-radius: 12px;
+  width: 300px;
+  text-align: center;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+}
+
+.login-box input {
+  width: 100%;
+  padding: 10px;
+  margin-top: 10px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+}
+
+.login-box button {
+  width: 100%;
+  margin-top: 15px;
+  padding: 10px;
+  background: #f97316;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: bold;
+}
+
+.logo-login {
+  width: 80px;
+  margin-bottom: 10px;
+}
 .soporte-float {
   position: fixed;
   bottom: 20px;
   right: 20px;
+
+  z-index: 9999;
+
   background: #22c55e;
   color: white;
+
   padding: 12px 16px;
   border-radius: 25px;
-  z-index: 9999;
+
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  box-shadow: 0 5px 15px rgba(0,0,0,0.2);
 }
 
-/* POPUP */
+.soporte-float:hover {
+  transform: scale(1.05);
+}
+
+.soporte-float span {
+  font-size: 13px;
+}
+
+.popup-contenido {
+  background: white;
+  padding: 25px;
+  border-radius: 12px;
+  width: 320px;
+  text-align: center;
+  position: relative;
+}
+
+.popup-contenido p {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.cerrar {
+  position: absolute;
+  top: 10px;
+  right: 15px;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.acciones {
+  margin-top: 20px;
+}
+
+.acciones button {
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.acciones button:first-child {
+  background: #25D366;
+  color: white;
+}
+
+.acciones button:last-child {
+  background: #f97316;
+  color: white;
+}
+#buscadorProductos {
+  width: 100%;
+  padding: 10px;
+  margin: 10px 0 15px 0;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+}
+
+/* ANIMACIÓN POPUP */
 .popup-soporte {
   position: fixed;
   top: 0;
@@ -189,35 +458,126 @@ button {
 
   opacity: 0;
   visibility: hidden;
-  transition: 0.3s;
+  transition: all 0.3s ease;
+
+  z-index: 1000;
 }
 
+/* ACTIVO */
 .popup-soporte.active {
   opacity: 1;
   visibility: visible;
 }
 
+/* CONTENIDO */
 .popup-contenido {
   background: white;
-  padding: 20px;
+  padding: 25px;
   border-radius: 12px;
+  width: 320px;
+  text-align: center;
+  position: relative;
+
+  transform: scale(0.8);
+  transition: all 0.3s ease;
+}
+
+/* CUANDO ABRE */
+.popup-soporte.active .popup-contenido {
+  transform: scale(1);
+}
+
+/* =========================
+   MOBILE FIRST FIX
+========================= */
+@media (max-width: 768px) {
+
+  .app {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    height: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .menu {
+    display: flex;
+    flex-direction: column; /* 🔥 CLAVE */
+    width: 100%;
+    margin-top: 20px;
+  }
+
+  .menu button {
+    width: 100%;
+    text-align: left;
+    padding: 12px 15px;
+    margin-bottom: 10px;
+
+    border-radius: 10px;
+    font-size: 15px;
+  }
+
+  .logout {
+    width: 90%;
+    margin-top: 10px;
+  }
+
+  .main {
+    width: 100%;
+    padding: 10px;
+  }
+
+  .grid {
+    grid-template-columns: 1fr; /* 🔥 UNA COLUMNA */
+  }
+
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+
+  .sidebar {
+    width: 200px;
+  }
+
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+}
+
+body {
+  overflow-x: hidden;
+}
+
+body {
+  overflow-x: hidden;
 }
 
 /* HAMBURGER */
 .hamburger {
   font-size: 24px;
   cursor: pointer;
+  margin-right: 10px;
   display: none;
 }
 
 /* OVERLAY */
 #overlay {
   position: fixed;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   background: rgba(0,0,0,0.5);
   opacity: 0;
   visibility: hidden;
+  transition: 0.3s;
+  z-index: 998;
 }
 
 #overlay.active {
@@ -225,7 +585,7 @@ button {
   visibility: visible;
 }
 
-/* MOBILE */
+/* SIDEBAR MOBILE */
 @media (max-width: 768px) {
 
   .hamburger {
@@ -235,22 +595,134 @@ button {
   .sidebar {
     position: fixed;
     top: 0;
-    left: -260px;
+    left: -260px; /* oculto */
     width: 260px;
     height: 100%;
+    background: white;
     z-index: 999;
     transition: 0.3s;
+    box-shadow: 5px 0 15px rgba(0,0,0,0.2);
   }
 
   .sidebar.active {
     left: 0;
   }
 
-  .main {
-    padding: 15px;
+}
+
+@media (max-width: 768px) {
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: -260px;
+    width: 260px;
+    height: 100%;
+
+    display: flex;
+    flex-direction: column;
+
+    background: white;
+    z-index: 999;
+    transition: 0.3s;
+
+    padding: 20px;
   }
 
-  .grid {
-    grid-template-columns: 1fr;
+  .sidebar.active {
+    left: 0;
   }
+
+  /* 🔥 CLAVE */
+  .sidebar-top {
+    flex: 1; /* ocupa todo el espacio disponible */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* LOGO */
+  .business-logo img {
+    width: 120px;
+    margin-bottom: 20px;
+  }
+
+  /* SWITCH */
+  .switch-container {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+
+  /* MENU */
+  .menu {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .menu button {
+    width: 100%;
+    padding: 12px;
+    border-radius: 10px;
+    text-align: left;
+  }
+
+  /* 🔥 LOGOUT ABAJO SIEMPRE */
+  .logout {
+    width: 100%;
+    background: #f97316;
+    color: white;
+    padding: 14px;
+    border-radius: 12px;
+
+    margin-top: auto; /* 🔥 ESTO LO BAJA */
+  }
+
 }
+.dashboard-metricas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.card-metrica {
+  background: white;
+  padding: 15px;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 5px 10px rgba(0,0,0,0.1);
+}
+
+.card-metrica h4 {
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+
+.card-metrica p {
+  font-size: 20px;
+  font-weight: bold;
+}
+
+#graficoOrdenes {
+  height: 250px !important;
+}
+
+.card canvas {
+  max-height: 250px;
+}
+
+.card-grafico {
+  margin-top: 20px;
+}
+
+.grafico-container {
+  position: relative;
+  width: 100%;
+  height: 300px; /* 🔥 CLAVE */
+}
+body { overflow-x }
