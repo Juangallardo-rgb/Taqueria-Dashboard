@@ -105,6 +105,7 @@ async function mostrarInicio() {
   contenedor.innerHTML = '';
 
   await cargarMetricas();
+  await cargarEstadoRestaurante();
 }
 
 
