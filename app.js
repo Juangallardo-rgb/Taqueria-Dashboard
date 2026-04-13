@@ -710,10 +710,77 @@ async function cargarMetricas() {
   }
   renderGraficoOrdenes(data);
 }
-const canvas = document.getElementById('graficoOrdenes');
-if (!canvas) return;
+function renderGraficoOrdenes(data) {
 
-const ctx = canvas.getContext('2d');
+  const canvas = document.getElementById('graficoOrdenes');
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+
+  const hoy = new Date();
+
+  const dias = [];
+  const conteo = {};
+
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(hoy.getDate() - i);
+
+    const key = d.toLocaleDateString();
+    dias.push(key);
+    conteo[key] = 0;
+  }
+
+  data.forEach(p => {
+
+    if (p.estado !== 'processing' && p.estado !== 'completed') return;
+
+    const fecha = new Date(p.created_at);
+    const key = fecha.toLocaleDateString();
+
+    if (conteo[key] !== undefined) {
+      conteo[key]++;
+    }
+
+  });
+
+  const valores = dias.map(d => conteo[d]);
+
+  if (window.graficoOrdenes) {
+    window.graficoOrdenes.destroy();
+  }
+
+  window.graficoOrdenes = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: dias,
+      datasets: [{
+        data: valores,
+        borderColor: '#f97316',
+        backgroundColor: 'rgba(249, 115, 22, 0.2)',
+        tension: 0.4,
+        fill: true,
+        borderWidth: 3,
+        pointRadius: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            stepSize: 1
+          }
+        }
+      }
+    }
+  });
+}
 // =====================
 // INIT
 // =====================
