@@ -741,9 +741,9 @@ function renderGraficoOrdenes(data) {
     valores.push(count);
   }
 
-  if (window.graficoOrdenes) {
-    window.graficoOrdenes.destroy();
-  }
+  if (window.graficoOrdenes && typeof window.graficoOrdenes.destroy === 'function') {
+  window.graficoOrdenes.destroy();
+}
 
   window.graficoOrdenes = new Chart(ctx, {
     type: 'bar',
