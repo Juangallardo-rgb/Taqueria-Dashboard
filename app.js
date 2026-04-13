@@ -68,20 +68,48 @@ function logout() {
 // =====================
 // INICIO
 // =====================
-function mostrarInicio() {
-  window.viendoPedidos = false;
+async function mostrarInicio() {
 
+  window.viendoPedidos = false;
   document.getElementById('tituloPagina').innerText = "Dashboard";
 
-  document.getElementById('contenido').innerHTML = `
+  const contenido = document.getElementById('contenido');
+  const contenedor = document.getElementById('contenedor');
+
+  contenido.innerHTML = `
+    <div class="dashboard-metricas">
+
+      <div class="card-metrica">
+        <h4>🧾 Órdenes Hoy</h4>
+        <p id="ordenesHoy">0</p>
+      </div>
+
+      <div class="card-metrica">
+        <h4>💰 Ventas Hoy</h4>
+        <p id="ventasHoy">$0</p>
+      </div>
+
+      <div class="card-metrica">
+        <h4>📅 Órdenes Mes</h4>
+        <p id="ordenesMes">0</p>
+      </div>
+
+      <div class="card-metrica">
+        <h4>💵 Ventas Mes</h4>
+        <p id="ventasMes">$0</p>
+      </div>
+
+    </div>
+
     <div class="card">
-      <h2>Bienvenido a DENIX 🚀</h2>
-      <p>Tu sistema inteligente de pedidos.</p>
+      <h3>📊 Ventas últimos 7 días</h3>
+      <canvas id="graficoVentas"></canvas>
     </div>
   `;
 
-  document.getElementById('contenedor').innerHTML = '';
-  cargarEstadoRestaurante();
+  contenedor.innerHTML = '';
+
+  await cargarMetricas();
 }
 
 
@@ -620,6 +648,77 @@ document.querySelectorAll('.menu button').forEach(btn => {
 
   });
 });
+
+async function cargarMetricas() {
+
+  try {
+
+    const res = await fetch('/orders-complete?ts=' + Date.now());
+    const data = await res.json();
+
+    const hoy = new Date();
+    const mes = hoy.getMonth();
+
+    let ordenesHoy = 0;
+    let ventasHoy = 0;
+    let ordenesMes = 0;
+    let ventasMes = 0;
+
+    const ventasPorDia = {};
+
+    data.forEach(p => {
+
+      const fecha = new Date(p.created_at);
+      const total = parseFloat(p.total || 0);
+
+      // HOY
+      if (fecha.toDateString() === hoy.toDateString()) {
+        ordenesHoy++;
+        ventasHoy += total;
+      }
+
+      // MES
+      if (fecha.getMonth() === mes) {
+        ordenesMes++;
+        ventasMes += total;
+      }
+
+      // ÚLTIMOS 7 DÍAS
+      const key = fecha.toLocaleDateString();
+      ventasPorDia[key] = (ventasPorDia[key] || 0) + total;
+
+    });
+
+    // 🔥 SET UI
+    document.getElementById('ordenesHoy').innerText = ordenesHoy;
+    document.getElementById('ventasHoy').innerText = `$${ventasHoy.toFixed(2)}`;
+    document.getElementById('ordenesMes').innerText = ordenesMes;
+    document.getElementById('ventasMes').innerText = `$${ventasMes.toFixed(2)}`;
+
+    renderGrafico(ventasPorDia);
+
+  } catch (error) {
+    console.error("Error métricas:", error);
+  }
+}
+function renderGrafico(data) {
+
+  const ctx = document.getElementById('graficoVentas');
+
+  const labels = Object.keys(data).slice(-7);
+  const values = Object.values(data).slice(-7);
+
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Ventas',
+        data: values
+      }]
+    }
+  });
+}
 // =====================
 // INIT
 // =====================
