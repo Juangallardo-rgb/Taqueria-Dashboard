@@ -101,14 +101,11 @@ async function mostrarInicio() {
 
   </div>
 
-  <!-- 🔥 GRAFICO ABAJO -->
   <div class="card card-grafico">
-    <h3>📈 Órdenes últimos 7 días</h3>
-
+    <h3>📊 Órdenes últimos 7 días</h3>
     <div class="grafico-container">
       <canvas id="graficoOrdenes"></canvas>
     </div>
-
   </div>
 `;
 
@@ -711,7 +708,7 @@ async function cargarMetricas() {
   renderGraficoOrdenes(data);
 }
 function renderGraficoOrdenes(data) {
-  console.log("🔥 renderGraficoOrdenes RUNNING");
+
   const canvas = document.getElementById('graficoOrdenes');
   if (!canvas) return;
 
@@ -719,48 +716,50 @@ function renderGraficoOrdenes(data) {
 
   const hoy = new Date();
 
- const dias = [];
-const conteo = {};
+  const labels = [];
+  const valores = [];
 
-for (let i = 6; i >= 0; i--) {
-  const d = new Date();
-  d.setDate(hoy.getDate() - i);
+  // 🔥 últimos 7 días
+  for (let i = 6; i >= 0; i--) {
 
-  const key = d.toISOString().split('T')[0]; // 🔥 FIX
-  dias.push(key);
-  conteo[key] = 0;
-}
+    const d = new Date();
+    d.setDate(hoy.getDate() - i);
 
-data.forEach(p => {
+    const dia = d.getDate(); // solo número del día
+    labels.push(dia);
 
-  if (p.estado !== 'processing' && p.estado !== 'completed') return;
+    let count = 0;
 
-  const fecha = new Date(p.created_at);
-  const key = fecha.toISOString().split('T')[0]; // 🔥 FIX
+    data.forEach(p => {
 
-  if (conteo[key] !== undefined) {
-    conteo[key]++;
+      if (p.estado !== 'processing' && p.estado !== 'completed') return;
+
+      const fecha = new Date(p.created_at);
+
+      if (
+        fecha.getDate() === d.getDate() &&
+        fecha.getMonth() === d.getMonth() &&
+        fecha.getFullYear() === d.getFullYear()
+      ) {
+        count++;
+      }
+
+    });
+
+    valores.push(count);
   }
-
-});
-  const valores = dias.map(d => conteo[d]);
 
   if (window.graficoOrdenes) {
     window.graficoOrdenes.destroy();
   }
 
   window.graficoOrdenes = new Chart(ctx, {
-    type: 'line',
+    type: 'bar', // 🔥 BARRAS
     data: {
-      labels: dias,
+      labels: labels,
       datasets: [{
         data: valores,
-        borderColor: '#f97316',
-        backgroundColor: 'rgba(249, 115, 22, 0.2)',
-        tension: 0.4,
-        fill: true,
-        borderWidth: 3,
-        pointRadius: 4
+        backgroundColor: '#f97316'
       }]
     },
     options: {
