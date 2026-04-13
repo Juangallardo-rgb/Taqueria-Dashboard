@@ -562,3 +562,55 @@ body {
 body {
   overflow-x: hidden;
 }
+
+/* HAMBURGER */
+.hamburger {
+  font-size: 24px;
+  cursor: pointer;
+  margin-right: 10px;
+  display: none;
+}
+
+/* OVERLAY */
+#overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.5);
+  opacity: 0;
+  visibility: hidden;
+  transition: 0.3s;
+  z-index: 998;
+}
+
+#overlay.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* SIDEBAR MOBILE */
+@media (max-width: 768px) {
+
+  .hamburger {
+    display: block;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: -260px; /* oculto */
+    width: 260px;
+    height: 100%;
+    background: white;
+    z-index: 999;
+    transition: 0.3s;
+    box-shadow: 5px 0 15px rgba(0,0,0,0.2);
+  }
+
+  .sidebar.active {
+    left: 0;
+  }
+
+}

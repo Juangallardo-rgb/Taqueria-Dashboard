@@ -599,6 +599,25 @@ async function cargarCategoriasPopup() {
     select.appendChild(option);
   });
 }
+
+function toggleMenu() {
+
+  const sidebar = document.querySelector('.sidebar');
+  const overlay = document.getElementById('overlay');
+
+  sidebar.classList.toggle('active');
+  overlay.classList.toggle('active');
+}
+document.querySelectorAll('.menu button').forEach(btn => {
+  btn.addEventListener('click', () => {
+
+    if (window.innerWidth <= 768) {
+      document.querySelector('.sidebar').classList.remove('active');
+      document.getElementById('overlay').classList.remove('active');
+    }
+
+  });
+});
 // =====================
 // INIT
 // =====================
