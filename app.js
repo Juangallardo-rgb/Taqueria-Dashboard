@@ -100,11 +100,6 @@ async function mostrarInicio() {
       </div>
 
     </div>
-
-    <div class="card">
-      <h3>📊 Ventas últimos 7 días</h3>
-      <canvas id="graficoVentas"></canvas>
-    </div>
   `;
 
   contenedor.innerHTML = '';
@@ -657,68 +652,48 @@ async function cargarMetricas() {
     const data = await res.json();
 
     const hoy = new Date();
-    const mes = hoy.getMonth();
 
     let ordenesHoy = 0;
     let ventasHoy = 0;
     let ordenesMes = 0;
     let ventasMes = 0;
 
-    const ventasPorDia = {};
-
     data.forEach(p => {
 
-      const fecha = new Date(p.created_at);
-      const total = parseFloat(p.total || 0);
+      // 🔥 SOLO PEDIDOS VALIDOS
+      if (p.estado !== 'processing' && p.estado !== 'completed') return;
 
-      // HOY
+      const fecha = new Date(p.created_at);
+      const total = Number(p.total) || 0;
+
+      // 🔥 HOY
       if (fecha.toDateString() === hoy.toDateString()) {
         ordenesHoy++;
         ventasHoy += total;
       }
 
-      // MES
-      if (fecha.getMonth() === mes) {
+      // 🔥 MES (AÑO INCLUIDO)
+      if (
+        fecha.getMonth() === hoy.getMonth() &&
+        fecha.getFullYear() === hoy.getFullYear()
+      ) {
         ordenesMes++;
         ventasMes += total;
       }
 
-      // ÚLTIMOS 7 DÍAS
-      const key = fecha.toLocaleDateString();
-      ventasPorDia[key] = (ventasPorDia[key] || 0) + total;
-
     });
 
-    // 🔥 SET UI
+    // 🔥 UI
     document.getElementById('ordenesHoy').innerText = ordenesHoy;
     document.getElementById('ventasHoy').innerText = `$${ventasHoy.toFixed(2)}`;
     document.getElementById('ordenesMes').innerText = ordenesMes;
     document.getElementById('ventasMes').innerText = `$${ventasMes.toFixed(2)}`;
 
-    renderGrafico(ventasPorDia);
-
   } catch (error) {
     console.error("Error métricas:", error);
   }
 }
-function renderGrafico(data) {
 
-  const ctx = document.getElementById('graficoVentas');
-
-  const labels = Object.keys(data).slice(-7);
-  const values = Object.values(data).slice(-7);
-
-  new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: labels,
-      datasets: [{
-        label: 'Ventas',
-        data: values
-      }]
-    }
-  });
-}
 // =====================
 // INIT
 // =====================
