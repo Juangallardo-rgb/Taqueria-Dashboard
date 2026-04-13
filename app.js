@@ -719,7 +719,12 @@ function renderGraficoOrdenes(data) {
     const d = new Date();
     d.setDate(hoy.getDate() - i);
 
-    labels.push(d.getDate());
+    const dia = d.toLocaleDateString('es-ES', {
+  day: 'numeric',
+  month: 'short'
+});
+
+labels.push(dia);
 
     let count = 0;
 
@@ -746,28 +751,65 @@ function renderGraficoOrdenes(data) {
 }
 
   window.graficoOrdenes = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        data: valores,
-        backgroundColor: '#f97316'
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false }
+  type: 'bar',
+  data: {
+    labels, // los dejamos pero los formateamos abajo
+    datasets: [{
+      label: 'Órdenes',
+      data: valores,
+      backgroundColor: '#f97316',
+      borderRadius: 8,
+      barThickness: 40
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+
+    plugins: {
+      legend: {
+        display: false
       },
-      scales: {
-        y: {
-          beginAtZero: true,
-          ticks: { stepSize: 1 }
+
+      tooltip: {
+        callbacks: {
+          title: function(context) {
+            return `Día ${context[0].label}`;
+          },
+          label: function(context) {
+            return `${context.raw} órdenes`;
+          }
+        }
+      }
+    },
+
+    scales: {
+      x: {
+        grid: {
+          display: false
+        },
+        ticks: {
+          font: {
+            size: 12
+          }
+        }
+      },
+
+      y: {
+        beginAtZero: true,
+        ticks: {
+          stepSize: 1,
+          callback: function(value) {
+            return value + ' ord';
+          }
+        },
+        grid: {
+          color: '#e5e7eb'
         }
       }
     }
-  });
+  }
+});
 }
 // =====================
 // INIT
