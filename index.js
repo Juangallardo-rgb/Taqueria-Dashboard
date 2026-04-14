@@ -218,7 +218,7 @@ app.get('/orders-complete', async (req, res) => {
 app.get('/products', async (req, res) => {
   try {
     const response = await axios.get(
-      `${WOO_URL}/wp-json/wc/v3/products?per_page=100`,
+      `${WOO_URL}/wp-json/wc/v3/products?per_page=100&_=${Date.now()}`
       {
         auth: {
           username: CONSUMER_KEY,
