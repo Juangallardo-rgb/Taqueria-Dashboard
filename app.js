@@ -554,7 +554,7 @@ function abrirEditar(id) {
   document.getElementById('editNombre').value = p.name || '';
   document.getElementById('editPrecio').value = p.price || '';
   document.getElementById('editDescripcion').value = p.description || '';
-  document.getElementById('editStock').value = producto.stock_status || 'instock';
+  document.getElementById('editStock').value = p.stock_status || 'instock';
   document.getElementById('popupEditar').classList.add('active');
 
   productoEditando = id;
@@ -817,6 +817,8 @@ labels.push(dia);
     }
   }
 });
+window.abrirEditar = abrirEditar;
+window.cerrarEditar = cerrarEditar;
 }
 // =====================
 // INIT
