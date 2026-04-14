@@ -555,10 +555,9 @@ function abrirEditar(id) {
   document.getElementById('editPrecio').value = p.price || '';
   document.getElementById('editDescripcion').value = p.description || '';
   document.getElementById('editStock').value = producto.stock_status || 'instock';
+  document.getElementById('popupEditar').classList.add('active');
 
   productoEditando = id;
-
-  document.getElementById('popupEditar').classList.add('active');
 }
 
 function cerrarEditar() {
