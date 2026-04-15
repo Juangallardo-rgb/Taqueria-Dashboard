@@ -212,51 +212,56 @@ async function verPedidos(esAuto = false) {
 
     contenedor.innerHTML = '';
 
-    pedidosFiltrados.forEach(p => {
+  pedidosFiltrados.forEach(p => {
 
-      let itemsHTML = "Sin detalle";
+  // 🔥 detectar pickup
+  const esPickup = p.shipping_lines?.some(l => l.method_id === 'local_pickup');
 
-      try {
-        if (p.items) {
-          const items = typeof p.items === "string"
-            ? JSON.parse(p.items)
-            : p.items;
+  let itemsHTML = "Sin detalle";
 
-          itemsHTML = items.map(i =>
-            `<div>• ${i.nombre} x${i.cantidad}</div>`
-          ).join('');
-        }
-      } catch (e) {}
+  try {
+    if (p.items) {
+      const items = typeof p.items === "string"
+        ? JSON.parse(p.items)
+        : p.items;
 
-      contenedor.innerHTML += `
-        <div class="card ${!pedidosVistos.includes(p.id) ? 'nuevo' : ''}" onclick="marcarComoVisto(${p.id}, this)">
+      itemsHTML = items.map(i =>
+        `<div>• ${i.nombre} x${i.cantidad}</div>`
+      ).join('');
+    }
+  } catch (e) {}
 
-          <h3>Pedido #${p.id}</h3>
+  contenedor.innerHTML += `
+    <div class="card ${!pedidosVistos.includes(p.id) ? 'nuevo' : ''}" onclick="marcarComoVisto(${p.id}, this)">
 
-          <p>🕒 ${new Date(p.created_at).toLocaleString()}</p>
+      ${esPickup ? `<div class="badge-pickup">🟢 PICKUP</div>` : ''}
 
-          <p>👤 Cliente: ${p.customer_name || 'Cliente'}</p>
+      <h3>Pedido #${p.id}</h3>
 
-          <div>
-            <strong>🍽 Detalle:</strong>
-            ${itemsHTML}
-          </div>
+      <p>🕒 ${new Date(p.created_at).toLocaleString()}</p>
 
-          <p>💰 Total: $${p.total}</p>
+      <p>👤 Cliente: ${p.customer_name || 'Cliente'}</p>
 
-          <p>📊 Estado: ${p.estado}</p>
+      <div>
+        <strong>🍽 Detalle:</strong>
+        ${itemsHTML}
+      </div>
 
-          <p>🛵 Driver: ${p.driver_name || "Sin asignar"}</p>
+      <p>💰 Total: $${p.total}</p>
 
-          ${p.tracking_url ? `
-            <a href="${p.tracking_url}" target="_blank" class="btn-tracking">
-              📍 Ver seguimiento
-            </a>
-          ` : ''}
+      <p>📊 Estado: ${p.estado}</p>
 
-        </div>
-      `;
-    });
+      ${!esPickup ? `<p>🛵 Driver: ${p.driver_name || "Sin asignar"}</p>` : ''}
+
+      ${!esPickup && p.tracking_url ? `
+        <a href="${p.tracking_url}" target="_blank" class="btn-tracking">
+          📍 Ver seguimiento
+        </a>
+      ` : ''}
+
+    </div>
+  `;
+});
 
   } catch (error) {
     console.error("ERROR PEDIDOS:", error);
