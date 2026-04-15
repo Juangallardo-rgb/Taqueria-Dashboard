@@ -149,6 +149,7 @@ async function verPedidos(esAuto = false) {
     if (!res.ok) throw new Error("Error API");
 
     const data = await res.json();
+    console.log("PEDIDO COMPLETO:", data[0]);
 
     let pedidosFiltrados = data;
     const ahora = new Date();
