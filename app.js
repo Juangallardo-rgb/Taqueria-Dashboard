@@ -236,6 +236,7 @@ async function verPedidos(esAuto = false) {
 
       ${esPickup ? `<div class="badge-pickup">🟢 PICKUP</div>` : ''}
 
+      ${esPickup ? `<div class="badge-pickup">🟢 PICKUP</div>` : ''}
       <h3>Pedido #${p.id}</h3>
 
       <p>🕒 ${new Date(p.created_at).toLocaleString()}</p>

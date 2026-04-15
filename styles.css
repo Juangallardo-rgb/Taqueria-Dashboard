@@ -726,3 +726,14 @@ body {
   height: 300px; /* 🔥 CLAVE */
 }
 body { overflow-x }
+
+.badge-pickup {
+  display: inline-block;
+  background: #22c55e;
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  padding: 4px 10px;
+  border-radius: 20px;
+  margin-bottom: 8px;
+}
