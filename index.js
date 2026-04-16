@@ -70,7 +70,18 @@ app.get('/woo-orders', async (req, res) => {
         estado_envio: esPickup ? 'pickup' : 'delivery',
 
         created_at: order.date_created,
-        items: order.line_items
+        items: order.line_items.map(item => {
+
+  const extras = item.meta_data
+    ?.filter(m => m.value)
+    .map(m => `${m.key}: ${m.value}`)
+    .join(', ');
+
+  return {
+    nombre: item.name + (extras ? ` (${extras})` : ''),
+    cantidad: item.quantity
+  };
+})
       };
     });
 
