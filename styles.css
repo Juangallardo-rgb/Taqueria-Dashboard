@@ -725,7 +725,8 @@ body {
   width: 100%;
   height: 300px; /* 🔥 CLAVE */
 }
-body { overflow-x };
+body { overflow:hidden;
+}
 
 .badge-pickup {
   display: inline-block;
