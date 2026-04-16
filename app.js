@@ -235,7 +235,9 @@ async function verPedidos(esAuto = false) {
   contenedor.innerHTML += `
     <div class="card ${!pedidosVistos.includes(p.id) ? 'nuevo' : ''}" onclick="marcarComoVisto(${p.id}, this)">
 
-      ${esPickup ? `<div class="badge-pickup">⚪ PICKUP</div>` : ''}
+      ${esPickup 
+      ? `<div class="badge-pickup">⚪ PICKUP</div>` 
+      : `<div class="badge-delivery">🚚 DELIVERY</div>`}
 
       <h3>Pedido #${p.id}</h3>
 

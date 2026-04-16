@@ -747,3 +747,20 @@ body {
 
   text-align: center;
 }
+
+.badge-delivery {
+  display: block;
+  width: fit-content;
+  margin: 0 auto 12px auto;
+
+  background: #f97316;
+  color: white;
+
+  font-size: 14px;
+  font-weight: bold;
+
+  padding: 6px 14px;
+  border-radius: 25px;
+
+  text-align: center;
+}
