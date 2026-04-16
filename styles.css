@@ -728,6 +728,7 @@ body {
 body {
   overflow-x: hidden;
   overflow-y: auto;
+
 }
 
 .badge-pickup {
@@ -735,7 +736,7 @@ body {
   width: fit-content;
   margin: 0 auto 12px auto; /* 🔥 centra horizontal */
 
-  background: #283ad8;
+  background: #22c55e;
   color: white;
 
   font-size: 14px; /* 🔥 más grande */
