@@ -725,16 +725,24 @@ body {
   width: 100%;
   height: 300px; /* 🔥 CLAVE */
 }
-body { overflow:hidden;
+body {
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .badge-pickup {
-  display: inline-block;
+  display: block;
+  width: fit-content;
+  margin: 0 auto 12px auto; /* 🔥 centra horizontal */
+
   background: #22c55e;
   color: white;
-  font-size: 12px;
+
+  font-size: 14px; /* 🔥 más grande */
   font-weight: bold;
-  padding: 4px 10px;
-  border-radius: 20px;
-  margin-bottom: 8px;
+
+  padding: 6px 14px; /* 🔥 más grande */
+  border-radius: 25px;
+
+  text-align: center;
 }
