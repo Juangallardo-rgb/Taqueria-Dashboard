@@ -207,7 +207,13 @@ app.get('/orders-complete', async (req, res) => {
         p.items,
         p.created_at,
         d.driver_name,
-        d.status AS estado_envio,
+
+        -- 🔥 FIX AQUÍ
+        CASE 
+          WHEN d.order_number IS NULL THEN 'pickup'
+          ELSE 'delivery'
+        END AS estado_envio,
+
         d.delivery_cost,
         d.tracking_url,
         d.picked_up_at,
@@ -225,6 +231,7 @@ app.get('/orders-complete', async (req, res) => {
     res.status(500).send('Error join');
   }
 });
+
 // ===============================
 // 🛒 PRODUCTOS (CRUD)
 // ===============================
