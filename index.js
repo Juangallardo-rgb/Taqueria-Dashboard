@@ -51,27 +51,36 @@ app.get('/woo-orders', async (req, res) => {
       }
     );
 
- wooOrders = response.data.map(order => {
+    const wooOrders = response.data.map(order => {
 
-  // 🔥 DETECCIÓN REAL QUE FUNCIONA EN TU CASO
-  const esPickup = !order.shipping?.address_1;
+      // 🔥 DETECCIÓN PICKUP (SEGURA)
+      const esPickup = !order.shipping?.address_1;
 
-  console.log("ORDER:", order.id, "Pickup:", esPickup);
+      console.log("ORDER:", order.id, "Pickup:", esPickup);
 
-  return {
-    id: order.id,
-    total: order.total,
-    estado: order.status,
-    customer_name: order.billing?.first_name + " " + order.billing?.last_name,
-    direccion: order.shipping?.address_1,
-    ciudad: order.shipping?.city,
+      return {
+        id: order.id,
+        total: order.total,
+        estado: order.status,
+        customer_name: order.billing?.first_name + " " + order.billing?.last_name,
+        direccion: order.shipping?.address_1,
+        ciudad: order.shipping?.city,
 
-    // 🔥 ESTE ES EL CAMPO CLAVE
-    estado_envio: esPickup ? 'pickup' : 'delivery',
+        // 🔥 CLAVE
+        estado_envio: esPickup ? 'pickup' : 'delivery',
 
-    created_at: order.date_created,
-    items: order.line_items
-  };
+        created_at: order.date_created,
+        items: order.line_items
+      };
+    });
+
+    // 🔥 ESTO FALTABA
+    res.json(wooOrders);
+
+  } catch (error) {
+    console.error("ERROR WOO:", error.response?.data || error.message);
+    res.status(500).send('Error WooCommerce');
+  }
 });
 
 
