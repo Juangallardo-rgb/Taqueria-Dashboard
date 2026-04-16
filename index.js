@@ -51,14 +51,25 @@ app.get('/woo-orders', async (req, res) => {
       }
     );
 
-    wooOrders = response.data.map(order => ({
-      id: order.id,
-      total: order.total,
-      estado: order.status,
-      cliente: order.billing?.first_name + " " + order.billing?.last_name,
-      direccion: order.shipping?.address_1,
-      ciudad: order.shipping?.city
-    }));
+  wooOrders = response.data.map(order => {
+
+  // 🔥 detectar si es pickup desde WooCommerce
+  const esPickup = order.shipping_lines?.some(
+    l => l.method_id === 'local_pickup'
+  );
+
+  return {
+    id: order.id,
+    total: order.total,
+    estado: order.status,
+    cliente: order.billing?.first_name + " " + order.billing?.last_name,
+    direccion: order.shipping?.address_1,
+    ciudad: order.shipping?.city,
+
+    // 🔥 NUEVO CAMPO CLAVE
+    estado_envio: esPickup ? 'pickup' : 'delivery'
+  };
+});
 
     res.json(wooOrders);
 

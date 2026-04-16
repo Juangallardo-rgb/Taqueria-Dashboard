@@ -216,7 +216,7 @@ async function verPedidos(esAuto = false) {
   pedidosFiltrados.forEach(p => {
 
   // 🔥 detectar pickup
-  const esPickup = p.shipping_lines?.some(l => l.method_id === 'local_pickup');
+  const esPickup = p.estado_envio === 'pickup';
 
   let itemsHTML = "Sin detalle";
 
@@ -237,7 +237,6 @@ async function verPedidos(esAuto = false) {
 
       ${esPickup ? `<div class="badge-pickup">🟢 PICKUP</div>` : ''}
 
-      ${esPickup ? `<div class="badge-pickup">🟢 PICKUP</div>` : ''}
       <h3>Pedido #${p.id}</h3>
 
       <p>🕒 ${new Date(p.created_at).toLocaleString()}</p>
