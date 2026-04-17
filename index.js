@@ -194,16 +194,23 @@ app.post('/webhook-shipday', async (req, res) => {
       try {
 
         const wooRes = await axios.get(
-          `${WOO_URL}/wp-json/wc/v3/orders/${orderNumber}`,
-          {
-            auth: {
-              username: CONSUMER_KEY,
-              password: CONSUMER_SECRET
-            }
-          }
-        );
+  `${WOO_URL}/wp-json/wc/v3/orders?search=${orderNumber}`,
+  {
+    auth: {
+      username: CONSUMER_KEY,
+      password: CONSUMER_SECRET
+    }
+  }
+);
 
-        const wooItems = wooRes.data.line_items;
+const wooOrder = wooRes.data[0]; // 🔥 ESTE ES EL BUENO
+
+if (!wooOrder) {
+  console.log("❌ No se encontró orden en Woo");
+  return;
+}
+
+const wooItems = wooOrder.line_items;
 
         // 🔥 3. ACTUALIZAR PEDIDO CON ITEMS REALES
         await pool.query(
