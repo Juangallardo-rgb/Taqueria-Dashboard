@@ -53,9 +53,11 @@ app.get('/woo-orders', async (req, res) => {
 
     const wooOrders = response.data.map(order => {
 
+
       // 🔥 DETECCIÓN PICKUP (SEGURA)
       const esPickup = !order.shipping?.address_1;
 
+      console.log(JSON.stringify(order.line_items, null, 2));
       console.log("ORDER:", order.id, "Pickup:", esPickup);
 
       return {
@@ -411,8 +413,6 @@ app.post('/toggle-restaurante', async (req, res) => {
   res.json(result.rows[0]);
 
 });
-
-console.log(JSON.stringify(order.line_items, null, 2));
 
 // 🚀 START
 app.listen(PORT, () => {
