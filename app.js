@@ -127,29 +127,24 @@ async function verPedidos(esAuto = false) {
   const contenido = document.getElementById('contenido');
   const contenedor = document.getElementById('contenedor');
 
-  // tabs solo la primera vez
   if (!esAuto) {
     contenido.innerHTML = `
       <div class="tabs">
-
         <button onclick="cambiarTab('recientes')" id="tab-recientes" class="tab">En proceso</button>
         <button onclick="cambiarTab('hoy')" id="tab-hoy" class="tab">Hoy</button>
         <button onclick="cambiarTab('ayer')" id="tab-ayer" class="tab">Ayer</button>
         <button onclick="cambiarTab('semana')" id="tab-semana" class="tab">Todas</button>
-
       </div>
     `;
-      contenedor.innerHTML = '<p>Cargando pedidos...</p>';
+    contenedor.innerHTML = '<p>Cargando pedidos...</p>';
   }
 
   try {
 
     const res = await fetch('/orders-complete?ts=' + Date.now());
-
     if (!res.ok) throw new Error("Error API");
 
     const data = await res.json();
-    console.log("PEDIDO COMPLETO:", data[0]);
 
     let pedidosFiltrados = data;
     const ahora = new Date();
@@ -157,8 +152,8 @@ async function verPedidos(esAuto = false) {
     // filtros
     if (tabActual === 'recientes') {
       pedidosFiltrados = data.filter(p =>
-  p.estado === 'processing' || p.estado === 'pending'
-    );
+        p.estado === 'processing' || p.estado === 'pending'
+      );
     }
 
     if (tabActual === 'hoy') {
@@ -213,65 +208,86 @@ async function verPedidos(esAuto = false) {
 
     contenedor.innerHTML = '';
 
-  pedidosFiltrados.forEach(p => {
+    pedidosFiltrados.forEach(p => {
 
-  // 🔥 detectar pickup
-  const esPickup = p.estado_envio === 'pickup';
+      // 🔥 DETECCIÓN PICKUP
+      const esPickup = p.estado_envio === 'pickup';
 
-  let itemsHTML = "Sin detalle";
+      // 🔥 PROCESAR ITEMS (CON VARIACIONES)
+      let itemsHTML = "Sin detalle";
 
-  try {
-    if (p.items) {
-      const items = typeof p.items === "string"
-        ? JSON.parse(p.items)
-        : p.items;
+      try {
+        if (p.items) {
 
-      itemsHTML = items.map(i =>
-        `<div>• ${i.nombre} x${i.cantidad}</div>`
-      ).join('');
-    }
-  } catch (e) {}
+          const items = typeof p.items === "string"
+            ? JSON.parse(p.items)
+            : p.items;
 
-  contenedor.innerHTML += `
-    <div class="card ${!pedidosVistos.includes(p.id) ? 'nuevo' : ''}" onclick="marcarComoVisto(${p.id}, this)">
+          itemsHTML = items.map(i => {
 
-      ${esPickup 
-      ? `<div class="badge-pickup">👜 PICKUP</div>` 
-      : `<div class="badge-delivery">🚚 DELIVERY</div>`}
+            let extras = '';
 
-      <h3>Pedido #${p.id}</h3>
+            if (i.meta_data && i.meta_data.length) {
+              extras = i.meta_data
+                .map(m => {
+                  if (typeof m.value === "string") return m.value;
+                  if (typeof m.value === "object") return m.value?.value || '';
+                  return '';
+                })
+                .filter(v => v)
+                .join(', ');
+            }
 
-      <p>🕒 ${new Date(p.created_at).toLocaleString()}</p>
+            return `
+              <div>
+                • ${i.name || i.nombre}${extras ? ` (${extras})` : ''} x${i.quantity || i.cantidad}
+              </div>
+            `;
+          }).join('');
+        }
+      } catch (e) {
+        console.error("ERROR ITEMS:", e);
+      }
 
-      <p>👤 Cliente: ${p.customer_name || 'Cliente'}</p>
+      contenedor.innerHTML += `
+        <div class="card ${!pedidosVistos.includes(p.id) ? 'nuevo' : ''}" onclick="marcarComoVisto(${p.id}, this)">
 
-      <div>
-        <strong>🍽 Detalle:</strong>
-        ${itemsHTML}
-      </div>
+          ${esPickup 
+            ? `<div class="badge-pickup">🟢 PICKUP</div>` 
+            : `<div class="badge-delivery">🚚 DELIVERY</div>`}
 
-      <p>💰 Total: $${p.total}</p>
+          <h3>Pedido #${p.id}</h3>
 
-      <p>📊 Estado: ${p.estado}</p>
+          <p>🕒 ${new Date(p.created_at).toLocaleString()}</p>
 
-      ${!esPickup ? `<p>🛵 Driver: ${p.driver_name || "Sin asignar"}</p>` : ''}
+          <p>👤 Cliente: ${p.customer_name || 'Cliente'}</p>
 
-      ${!esPickup && p.tracking_url ? `
-        <a href="${p.tracking_url}" target="_blank" class="btn-tracking">
-          📍 Ver seguimiento
-        </a>
-      ` : ''}
+          <div>
+            <strong>🍽 Detalle:</strong>
+            ${itemsHTML}
+          </div>
 
-    </div>
-  `;
-});
+          <p>💰 Total: $${p.total}</p>
+
+          <p>📊 Estado: ${p.estado}</p>
+
+          ${!esPickup ? `<p>🛵 Driver: ${p.driver_name || "Sin asignar"}</p>` : ''}
+
+          ${!esPickup && p.tracking_url ? `
+            <a href="${p.tracking_url}" target="_blank" class="btn-tracking">
+              📍 Ver seguimiento
+            </a>
+          ` : ''}
+
+        </div>
+      `;
+    });
 
   } catch (error) {
     console.error("ERROR PEDIDOS:", error);
     contenedor.innerHTML = "<p>Error cargando pedidos</p>";
   }
 }
-
 
 // =====================
 // LOOP TIEMPO REAL

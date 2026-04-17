@@ -146,7 +146,7 @@ app.post('/webhook-shipday', async (req, res) => {
 
   console.log("🔥 SHIPDAY:", data);
 
-  // ✅ DRIVER SEGURO (SIN ?.)
+  // ✅ DRIVER SEGURO
   const driverName = data.carrier && data.carrier.name 
     ? data.carrier.name 
     : null;
@@ -163,6 +163,7 @@ app.post('/webhook-shipday', async (req, res) => {
 
   try {
 
+    // 🔥 1. GUARDAR / ACTUALIZAR DELIVERY
     await pool.query(
       `INSERT INTO deliveries 
       (order_number, driver_name, status, delivery_cost, tracking_url, picked_up_at, delivered_at)
@@ -176,17 +177,53 @@ app.post('/webhook-shipday', async (req, res) => {
         picked_up_at = EXCLUDED.picked_up_at,
         delivered_at = EXCLUDED.delivered_at`,
       [
-        String(orderNumber), // 👈 1
-        driverName,          // 👈 2
-        data.order_status,   // 👈 3
-        data.order ? data.order.delivery_fee : null, // 👈 4
-        data.trackingUrl,    // 👈 5 🔥 IMPORTANTE
-        convertirFecha(data.order ? data.order.pickedup_time : null), // 👈 6
-        convertirFecha(data.order ? data.order.delivery_time : null)  // 👈 7
+        String(orderNumber),
+        driverName,
+        data.order_status,
+        data.order ? data.order.delivery_fee : null,
+        data.trackingUrl,
+        convertirFecha(data.order ? data.order.pickedup_time : null),
+        convertirFecha(data.order ? data.order.delivery_time : null)
       ]
     );
 
-    console.log("✅ GUARDADO OK");
+    console.log("✅ DELIVERY GUARDADO");
+
+    // 🔥 2. TRAER ITEMS REALES DESDE WOO (CON VARIACIONES)
+    if (orderNumber) {
+      try {
+
+        const wooRes = await axios.get(
+          `${WOO_URL}/wp-json/wc/v3/orders/${orderNumber}`,
+          {
+            auth: {
+              username: CONSUMER_KEY,
+              password: CONSUMER_SECRET
+            }
+          }
+        );
+
+        const wooItems = wooRes.data.line_items;
+
+        // 🔥 3. ACTUALIZAR PEDIDO CON ITEMS REALES
+        await pool.query(
+          `UPDATE pedidos 
+           SET items = $1 
+           WHERE woo_order_id = $2`,
+          [
+            JSON.stringify(wooItems),
+            String(orderNumber)
+          ]
+        );
+
+        console.log("🔥 ITEMS ACTUALIZADOS DESDE WOO");
+
+      } catch (err) {
+        console.error("❌ ERROR WOO ITEMS:", err.message);
+      }
+    }
+
+    console.log("🚚 SHIPDAY PROCESADO:", new Date());
 
     res.sendStatus(200);
 
@@ -194,7 +231,7 @@ app.post('/webhook-shipday', async (req, res) => {
     console.error("❌ ERROR SHIPDAY:", error);
     res.sendStatus(500);
   }
-console.log("🚚 SHIPDAY RECIBIDO:", new Date());
+
 });
 
 
