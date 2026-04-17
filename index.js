@@ -412,6 +412,8 @@ app.post('/toggle-restaurante', async (req, res) => {
 
 });
 
+console.log(JSON.stringify(order.line_items, null, 2));
+
 // 🚀 START
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);
