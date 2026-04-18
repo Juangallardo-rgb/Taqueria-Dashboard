@@ -166,22 +166,9 @@ app.post('/webhook-shipday', async (req, res) => {
 
   try {
 
-    // 🔥 CREAR PEDIDO INMEDIATO
-    if (orderNumber) {
-      await pool.query(
-        `INSERT INTO pedidos (woo_order_id, customer_name, total, estado, created_at)
-         VALUES ($1, $2, $3, $4, NOW())
-         ON CONFLICT (woo_order_id) DO NOTHING`,
-        [
-          String(orderNumber),
-          data.delivery_details?.name || 'Cliente',
-          data.order?.total_cost || 0,
-          'processing'
-        ]
-      );
-    }
+    // ❌ YA NO CREAMOS PEDIDOS AQUÍ
+    // SOLO MANEJAMOS DELIVERY
 
-    // 🔥 GUARDAR DELIVERY
     await pool.query(
       `INSERT INTO deliveries 
       (order_number, driver_name, status, delivery_cost, tracking_url, picked_up_at, delivered_at)
@@ -205,7 +192,7 @@ app.post('/webhook-shipday', async (req, res) => {
       ]
     );
 
-    console.log("✅ SHIPDAY OK");
+    console.log("🚚 SHIPDAY OK (solo delivery)");
 
     res.sendStatus(200);
 
