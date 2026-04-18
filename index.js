@@ -144,8 +144,6 @@ app.post('/webhook-shipday', async (req, res) => {
 
   const data = req.body;
 
-  console.log("🔥 SHIPDAY:", data);
-
   const driverName = data.carrier?.name || null;
   const orderNumber = data.order?.order_number || null;
 
@@ -156,7 +154,7 @@ app.post('/webhook-shipday', async (req, res) => {
 
   try {
 
-    // 🔥 1. CREAR PEDIDO INMEDIATO (EVITA ESPERA DE WOO)
+    // 🔥 CREAR PEDIDO INMEDIATO
     if (orderNumber) {
       await pool.query(
         `INSERT INTO pedidos (woo_order_id, customer_name, total, estado, created_at)
@@ -171,7 +169,7 @@ app.post('/webhook-shipday', async (req, res) => {
       );
     }
 
-    // 🔥 2. GUARDAR / ACTUALIZAR DELIVERY
+    // 🔥 GUARDAR DELIVERY
     await pool.query(
       `INSERT INTO deliveries 
       (order_number, driver_name, status, delivery_cost, tracking_url, picked_up_at, delivered_at)
@@ -195,50 +193,7 @@ app.post('/webhook-shipday', async (req, res) => {
       ]
     );
 
-    console.log("✅ DELIVERY GUARDADO");
-
-    // 🔥 3. TRAER ITEMS REALES DESDE WOO (SIN BLOQUEAR)
-    if (orderNumber) {
-      try {
-
-        const wooRes = await axios.get(
-          `${WOO_URL}/wp-json/wc/v3/orders?search=${orderNumber}`,
-          {
-            auth: {
-              username: CONSUMER_KEY,
-              password: CONSUMER_SECRET
-            }
-          }
-        );
-
-        const wooOrder = wooRes.data[0];
-
-        if (wooOrder) {
-
-          const wooItems = wooOrder.line_items;
-
-          await pool.query(
-            `UPDATE pedidos 
-             SET items = $1 
-             WHERE woo_order_id = $2`,
-            [
-              JSON.stringify(wooItems),
-              String(orderNumber)
-            ]
-          );
-
-          console.log("🔥 ITEMS ACTUALIZADOS DESDE WOO");
-
-        } else {
-          console.log("⚠️ Woo aún no devuelve la orden");
-        }
-
-      } catch (err) {
-        console.error("❌ ERROR WOO ITEMS:", err.message);
-      }
-    }
-
-    console.log("🚚 SHIPDAY PROCESADO:", new Date());
+    console.log("✅ SHIPDAY OK");
 
     res.sendStatus(200);
 
