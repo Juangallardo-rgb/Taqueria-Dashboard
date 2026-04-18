@@ -166,9 +166,7 @@ app.post('/webhook-shipday', async (req, res) => {
 
   try {
 
-    // ❌ YA NO CREAMOS PEDIDOS AQUÍ
-    // SOLO MANEJAMOS DELIVERY
-
+    // 🔥 1. GUARDAR DELIVERY (COMO YA TENÍAS)
     await pool.query(
       `INSERT INTO deliveries 
       (order_number, driver_name, status, delivery_cost, tracking_url, picked_up_at, delivered_at)
@@ -192,7 +190,74 @@ app.post('/webhook-shipday', async (req, res) => {
       ]
     );
 
-    console.log("🚚 SHIPDAY OK (solo delivery)");
+    console.log("🚚 SHIPDAY OK (delivery actualizado)");
+
+    // 🔥 2. TRAER PEDIDO COMPLETO DESDE WOO (RÁPIDO)
+    if (orderNumber) {
+
+      setTimeout(async () => {
+
+        try {
+
+          const wooRes = await axios.get(
+            `${WOO_URL}/wp-json/wc/v3/orders/${orderNumber}`,
+            {
+              auth: {
+                username: CONSUMER_KEY,
+                password: CONSUMER_SECRET
+              }
+            }
+          );
+
+          const order = wooRes.data;
+
+          if (!order || !order.line_items) {
+            console.log("⏳ Woo aún no tiene items");
+            return;
+          }
+
+          const items = order.line_items.map(i => {
+
+            const extras = (i.meta_data || [])
+              .filter(m => m.value && m.value !== '')
+              .map(m => `${m.key}: ${m.value}`)
+              .join(', ');
+
+            return {
+              nombre: `${i.name}${extras ? ` (${extras})` : ''}`,
+              cantidad: i.quantity
+            };
+          });
+
+          // 🔥 3. INSERTAR PEDIDO COMPLETO (UNA SOLA VEZ)
+          await pool.query(
+            `INSERT INTO pedidos 
+            (restaurante_id, total, estado, woo_order_id, customer_name, items, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, NOW())
+            ON CONFLICT (woo_order_id)
+            DO UPDATE SET
+              estado = EXCLUDED.estado,
+              total = EXCLUDED.total,
+              customer_name = EXCLUDED.customer_name,
+              items = EXCLUDED.items`,
+            [
+              1,
+              order.total,
+              order.status,
+              order.id,
+              `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
+              JSON.stringify(items)
+            ]
+          );
+
+          console.log("🔥 PEDIDO COMPLETO GUARDADO DESDE SHIPDAY");
+
+        } catch (err) {
+          console.log("❌ ERROR WOO DESDE SHIPDAY:", err.message);
+        }
+
+      }, 2000); // 🔥 pequeño delay para que Woo esté listo
+    }
 
     res.sendStatus(200);
 
