@@ -150,7 +150,7 @@ async function verPedidos(esAuto = false) {
     data.forEach(p => {
       if (!p.items && p.estado_envio === 'pickup' && !p._forcing) {
         p._forcing = true;
-        fetch(`/force-order/${p.id}`);
+        fetch(`/force-order/${p.woo_order_id}`);
       }
     });
 
