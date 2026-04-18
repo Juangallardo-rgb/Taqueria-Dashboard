@@ -39,10 +39,13 @@ app.get('/dashboard', (req, res) => {
 // ===============================
 // 📦 WOO ORDERS
 // ===============================
+// ===============================
+// 🔥 GET WOO ORDERS (OPTIMIZADO)
+// ===============================
 app.get('/woo-orders', async (req, res) => {
   try {
     const response = await axios.get(
-      `${WOO_URL}/wp-json/wc/v3/orders`,
+      `${WOO_URL}/wp-json/wc/v3/orders?per_page=20`,
       {
         auth: {
           username: CONSUMER_KEY,
@@ -53,60 +56,69 @@ app.get('/woo-orders', async (req, res) => {
 
     const wooOrders = response.data.map(order => {
 
-
-      // 🔥 DETECCIÓN PICKUP (SEGURA)
-      const esPickup = !order.shipping?.address_1;
-
-      console.log(JSON.stringify(order.line_items, null, 2));
-      console.log("ORDER:", order.id, "Pickup:", esPickup);
+      const esPickup = order.shipping_lines?.some(
+        l => l.method_id === 'local_pickup'
+      );
 
       return {
         id: order.id,
         total: order.total,
         estado: order.status,
-        customer_name: order.billing?.first_name + " " + order.billing?.last_name,
-        direccion: order.shipping?.address_1,
-        ciudad: order.shipping?.city,
+        customer_name: `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
+        direccion: order.shipping?.address_1 || '',
+        ciudad: order.shipping?.city || '',
 
-        // 🔥 CLAVE
         estado_envio: esPickup ? 'pickup' : 'delivery',
 
         created_at: order.date_created,
-        items: order.line_items.map(item => {
 
-  const extras = item.meta_data
-    ?.filter(m => m.value)
-    .map(m => `${m.key}: ${m.value}`)
-    .join(', ');
+        items: (order.line_items || []).map(item => {
 
-  return {
-    nombre: item.name + (extras ? ` (${extras})` : ''),
-    cantidad: item.quantity
-  };
-})
+          const extras = (item.meta_data || [])
+            .filter(m => m.value && m.value !== '')
+            .map(m => `${m.key}: ${m.value}`)
+            .join(', ');
+
+          return {
+            nombre: `${item.name}${extras ? ` (${extras})` : ''}`,
+            cantidad: item.quantity
+          };
+        })
       };
     });
 
-    // 🔥 ESTO FALTABA
     res.json(wooOrders);
 
   } catch (error) {
-    console.error("ERROR WOO:", error.response?.data || error.message);
+    console.error("❌ ERROR WOO:", error.response?.data || error.message);
     res.status(500).send('Error WooCommerce');
   }
 });
 
 
 // ===============================
-// 🔥 WEBHOOK WOO
+// 🔥 WEBHOOK WOO (CORREGIDO)
 // ===============================
 app.post('/webhook-order', async (req, res) => {
 
   const order = req.body;
 
-  console.log("🔥 WOO WEBHOOK:", order);
+  console.log("🔥 WOO WEBHOOK:", order.id);
 
   try {
+
+    const items = (order.line_items || []).map(i => {
+
+      const extras = (i.meta_data || [])
+        .filter(m => m.value && m.value !== '')
+        .map(m => `${m.key}: ${m.value}`)
+        .join(', ');
+
+      return {
+        nombre: `${i.name}${extras ? ` (${extras})` : ''}`,
+        cantidad: i.quantity
+      };
+    });
 
     await pool.query(
       `INSERT INTO pedidos (restaurante_id, total, estado, woo_order_id, customer_name, items)
@@ -114,19 +126,20 @@ app.post('/webhook-order', async (req, res) => {
        ON CONFLICT (woo_order_id)
        DO UPDATE SET
          estado = EXCLUDED.estado,
-         total = EXCLUDED.total`,
+         total = EXCLUDED.total,
+         customer_name = EXCLUDED.customer_name,
+         items = EXCLUDED.items`,
       [
         1,
         order.total,
-        order.status, // 🔥 CLAVE
+        order.status,
         order.id,
-        order.billing ? order.billing.first_name + " " + order.billing.last_name : "Cliente",
-        JSON.stringify(order.line_items.map(i => ({
-          nombre: i.name,
-          cantidad: i.quantity
-        })))
+        `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
+        JSON.stringify(items)
       ]
     );
+
+    console.log("✅ WOO GUARDADO CON ITEMS");
 
     res.sendStatus(200);
 
@@ -134,9 +147,8 @@ app.post('/webhook-order', async (req, res) => {
     console.error("❌ ERROR WOO:", error);
     res.sendStatus(500);
   }
-  console.log("🔥 PEDIDO RECIBIDO:", new Date());
-});
 
+});
 // ===============================
 // 🚚 WEBHOOK SHIPDAY
 // ===============================
