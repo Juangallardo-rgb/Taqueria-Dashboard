@@ -485,6 +485,66 @@ app.post('/toggle-restaurante', async (req, res) => {
 
 });
 
+app.get('/force-order/:id', async (req, res) => {
+  const orderId = req.params.id;
+
+  try {
+
+    const wooRes = await axios.get(
+      `${WOO_URL}/wp-json/wc/v3/orders/${orderId}`,
+      {
+        auth: {
+          username: CONSUMER_KEY,
+          password: CONSUMER_SECRET
+        }
+      }
+    );
+
+    const order = wooRes.data;
+
+    const items = order.line_items.map(i => {
+
+      const extras = (i.meta_data || [])
+        .filter(m => m.value && m.value !== '')
+        .map(m => `${m.key}: ${m.value}`)
+        .join(', ');
+
+      return {
+        nombre: `${i.name}${extras ? ` (${extras})` : ''}`,
+        cantidad: i.quantity
+      };
+    });
+
+    await pool.query(
+      `INSERT INTO pedidos 
+      (restaurante_id, total, estado, woo_order_id, customer_name, items, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      ON CONFLICT (woo_order_id)
+      DO UPDATE SET
+        estado = EXCLUDED.estado,
+        total = EXCLUDED.total,
+        customer_name = EXCLUDED.customer_name,
+        items = EXCLUDED.items`,
+      [
+        1,
+        order.total,
+        order.status,
+        order.id,
+        `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
+        JSON.stringify(items)
+      ]
+    );
+
+    console.log("🔥 PICKUP FORZADO:", orderId);
+
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error("❌ ERROR FORCE ORDER:", err.message);
+    res.status(500).send("Error");
+  }
+});
+
 // 🚀 START
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);

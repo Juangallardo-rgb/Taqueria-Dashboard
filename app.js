@@ -146,20 +146,29 @@ async function verPedidos(esAuto = false) {
 
     const data = await res.json();
 
+    // 🔥 FIX PICKUP RÁPIDO (CLAVE)
+    data.forEach(p => {
+      if (!p.items && p.estado_envio === 'pickup' && !p._forcing) {
+        p._forcing = true;
+        fetch(`/force-order/${p.id}`);
+      }
+    });
+
     let pedidosFiltrados = data;
     const ahora = new Date();
 
     // filtros
     if (tabActual === 'recientes') {
       pedidosFiltrados = data.filter(p =>
-        p.estado === 'processing' || p.estado === 'pending'
+        (p.estado || '').toLowerCase().trim() === 'processing' ||
+        (p.estado || '').toLowerCase().trim() === 'pending'
       );
     }
 
     if (tabActual === 'hoy') {
       pedidosFiltrados = data.filter(p => {
         const fecha = new Date(p.created_at);
-        return p.estado === 'completed' &&
+        return (p.estado || '').toLowerCase() === 'completed' &&
           fecha.toDateString() === ahora.toDateString();
       });
     }
@@ -170,7 +179,7 @@ async function verPedidos(esAuto = false) {
 
       pedidosFiltrados = data.filter(p => {
         const fecha = new Date(p.created_at);
-        return p.estado === 'completed' &&
+        return (p.estado || '').toLowerCase() === 'completed' &&
           fecha.toDateString() === ayer.toDateString();
       });
     }
@@ -181,7 +190,7 @@ async function verPedidos(esAuto = false) {
 
       pedidosFiltrados = data.filter(p => {
         const fecha = new Date(p.created_at);
-        return p.estado === 'completed' &&
+        return (p.estado || '').toLowerCase() === 'completed' &&
           fecha >= hace7dias;
       });
     }
@@ -210,10 +219,8 @@ async function verPedidos(esAuto = false) {
 
     pedidosFiltrados.forEach(p => {
 
-      // 🔥 DETECCIÓN PICKUP
       const esPickup = p.estado_envio === 'pickup';
 
-      // 🔥 PROCESAR ITEMS (CON VARIACIONES)
       let itemsHTML = "Sin detalle";
 
       try {
@@ -225,24 +232,11 @@ async function verPedidos(esAuto = false) {
 
           itemsHTML = items.map(i => {
 
-            let extras = '';
+            const nombre = i.name || i.nombre || 'Producto';
+            const cantidad = i.quantity || i.cantidad || 1;
 
-            if (i.meta_data && i.meta_data.length) {
-              extras = i.meta_data
-                .map(m => {
-                  if (typeof m.value === "string") return m.value;
-                  if (typeof m.value === "object") return m.value?.value || '';
-                  return '';
-                })
-                .filter(v => v)
-                .join(', ');
-            }
+            return `<div>• ${nombre} x${cantidad}</div>`;
 
-            return `
-              <div>
-                • ${i.name || i.nombre}${extras ? ` (${extras})` : ''} x${i.quantity || i.cantidad}
-              </div>
-            `;
           }).join('');
         }
       } catch (e) {
