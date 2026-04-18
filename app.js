@@ -146,13 +146,17 @@ async function verPedidos(esAuto = false) {
 
     const data = await res.json();
 
-    // 🔥 FIX PICKUP RÁPIDO (CLAVE)
-    data.forEach(p => {
-      if (!p.items && p.estado_envio === 'pickup' && !p._forcing) {
-        p._forcing = true;
-        fetch(`/force-order/${p.woo_order_id}`);
-      }
-    });
+    // 🔥 FIX PICKUP RÁPIDO (CORRECTO)
+data.forEach(p => {
+
+  const idWoo = p.woo_order_id || p.id;
+
+  if (!p.items && p.estado_envio === 'pickup' && idWoo && !p._forcing) {
+    p._forcing = true;
+    fetch(`/force-order/${idWoo}`);
+  }
+
+});
 
     let pedidosFiltrados = data;
     const ahora = new Date();
