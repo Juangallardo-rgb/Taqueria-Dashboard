@@ -147,21 +147,23 @@ async function verPedidos(esAuto = false) {
     const data = await res.json();
 
     // 🔥 FIX PICKUP SIN LOOP (CLAVE)
-    window.forzados = window.forzados || new Set();
+  window.forzados = window.forzados || new Set();
 
-    data.forEach(p => {
-      const idWoo = p.woo_order_id || p.id;
+data.forEach(p => {
 
-      if (
-        !p.items &&
-        p.estado_envio === 'pickup' &&
-        idWoo &&
-        !window.forzados.has(idWoo)
-      ) {
-        window.forzados.add(idWoo);
-        fetch(`/force-order/${idWoo}`);
-      }
-    });
+  const idWoo = p.woo_order_id;
+
+  if (
+    idWoo && // 🔥 CLAVE: solo si existe woo_order_id
+    (!p.items || p.items === '[]') &&
+    p.estado_envio === 'pickup' &&
+    !window.forzados.has(idWoo)
+  ) {
+    window.forzados.add(idWoo);
+    fetch(`/force-order/${idWoo}`);
+  }
+
+});
 
     let pedidosFiltrados = data;
     const ahora = new Date();
