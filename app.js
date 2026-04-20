@@ -4,6 +4,8 @@ let productosGlobal = [];
 let productoEditando = null;
 let tabActual = 'recientes';
 let ultimoPedidoId = null;
+let ultimoPedidoGlobal = null;
+let audioPedido = new Audio('/sonido.mp3');
 
 window.viendoPedidos = false;
 
@@ -120,6 +122,7 @@ async function mostrarInicio() {
 // PEDIDOS (TIEMPO REAL)
 // =====================
 async function verPedidos(esAuto = false) {
+  limpiarAlertaPedidos();
 
   document.getElementById('tituloPagina').innerText = "Pedidos";
   window.viendoPedidos = true;
@@ -859,6 +862,49 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js')
     .then(() => console.log('SW registrado'));
 }
+}
+
+setInterval(async () => {
+  try {
+
+    const res = await fetch('/orders-complete');
+    const data = await res.json();
+
+    if (!data.length) return;
+
+    const nuevoId = data[0].id;
+
+    // 🔥 DETECTAR NUEVO PEDIDO GLOBAL
+    if (ultimoPedidoGlobal && nuevoId > ultimoPedidoGlobal) {
+
+      // 🔊 SONIDO SIEMPRE
+      audioPedido.currentTime = 0;
+      audioPedido.play();
+
+      // 🔴 ACTIVAR PARPADEO
+      activarAlertaPedidos();
+    }
+
+    ultimoPedidoGlobal = nuevoId;
+
+  } catch (e) {
+    console.error("ERROR GLOBAL PEDIDOS:", e);
+  }
+
+}, 3000); // cada 3s
+
+function activarAlertaPedidos() {
+  const btn = document.getElementById('btn-pedidos');
+  if (btn) {
+    btn.classList.add('parpadeo');
+  }
+}
+
+function limpiarAlertaPedidos() {
+  const btn = document.getElementById('btn-pedidos');
+  if (btn) {
+    btn.classList.remove('parpadeo');
+  }
 }
 // =====================
 // INIT

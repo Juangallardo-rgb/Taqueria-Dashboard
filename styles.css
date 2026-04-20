@@ -764,3 +764,13 @@ body {
 
   text-align: center;
 }
+
+.parpadeo {
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0% { background-color: #ff0000; color: white; }
+  50% { background-color: transparent; color: inherit; }
+  100% { background-color: #ff0000; color: white; }
+}
