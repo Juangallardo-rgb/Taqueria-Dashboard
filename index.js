@@ -490,18 +490,27 @@ app.get('/force-order/:id', async (req, res) => {
 
   try {
 
-    // 🔥 1. VERIFICAR SI YA TIENE ITEMS (CLAVE PARA EVITAR LOOP)
+    // 🔥 1. TRAER PEDIDO ACTUAL
     const existing = await pool.query(
       `SELECT items FROM pedidos WHERE woo_order_id = $1`,
       [orderId]
     );
 
-    if (existing.rows.length && existing.rows[0].items && existing.rows[0].items !== '[]') {
-      // 👉 Ya tiene items → NO hacer nada
-      return res.json({ skipped: true });
+    if (existing.rows.length) {
+      const itemsActual = existing.rows[0].items;
+
+      // 🔥 VALIDACIÓN REAL (CLAVE)
+      if (
+        itemsActual &&
+        itemsActual !== '[]' &&
+        itemsActual !== null &&
+        itemsActual !== ''
+      ) {
+        return res.json({ skipped: true });
+      }
     }
 
-    // 🔥 2. TRAER ORDEN DESDE WOO
+    // 🔥 2. TRAER DESDE WOO
     const wooRes = await axios.get(
       `${WOO_URL}/wp-json/wc/v3/orders?search=${orderId}`,
       {
@@ -512,7 +521,7 @@ app.get('/force-order/:id', async (req, res) => {
       }
     );
 
-    const order = wooRes.data && wooRes.data.length ? wooRes.data[0] : null;
+    const order = wooRes.data?.[0];
 
     if (!order) {
       return res.json({ skipped: true });
@@ -532,24 +541,18 @@ app.get('/force-order/:id', async (req, res) => {
       };
     });
 
-    // 🔥 4. ACTUALIZAR SOLO SI NO TENÍA ITEMS
+    // 🔥 4. GUARDAR SOLO UNA VEZ
     await pool.query(
       `UPDATE pedidos 
-       SET items = $1,
-           total = $2,
-           estado = $3,
-           customer_name = $4
-       WHERE woo_order_id = $5`,
+       SET items = $1
+       WHERE woo_order_id = $2`,
       [
         JSON.stringify(items),
-        order.total,
-        order.status,
-        `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
         order.id
       ]
     );
 
-    console.log("🔥 PICKUP FORZADO (1 sola vez):", orderId);
+    console.log("🔥 PICKUP FORZADO REAL:", orderId);
 
     res.json({ success: true });
 
