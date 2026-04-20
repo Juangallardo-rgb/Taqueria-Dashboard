@@ -147,20 +147,31 @@ async function verPedidos(esAuto = false) {
     const data = await res.json();
 
     // 🔥 FIX PICKUP SIN LOOP (CLAVE)
-  window.forzados = window.forzados || new Set();
+  window.forzados = window.forzados || {};
 
 data.forEach(p => {
 
   const idWoo = p.woo_order_id;
 
-  if (
-    idWoo && // 🔥 CLAVE: solo si existe woo_order_id
-    (!p.items || p.items === '[]') &&
-    p.estado_envio === 'pickup' &&
-    !window.forzados.has(idWoo)
-  ) {
-    window.forzados.add(idWoo);
-    fetch(`/force-order/${idWoo}`);
+  if (!idWoo || p.estado_envio !== 'pickup') return;
+
+  const sinItems = !p.items || p.items === '[]';
+
+  if (sinItems) {
+
+    if (!window.forzados[idWoo]) {
+      window.forzados[idWoo] = { intentos: 0 };
+    }
+
+    if (window.forzados[idWoo].intentos < 3) {
+
+      window.forzados[idWoo].intentos++;
+
+      setTimeout(() => {
+        fetch(`/force-order/${idWoo}`);
+      }, 1000 * window.forzados[idWoo].intentos); // 1s, 2s, 3s
+
+    }
   }
 
 });
