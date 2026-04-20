@@ -288,7 +288,7 @@ data.forEach(p => {
 
 ${esPickup && p.estado !== 'completed' ? `
   <button class="btn-completar" onclick="event.stopPropagation(); completarPedido(${p.id})">
-    ✅ Marcar como listo
+    ✅ COMPLETADO
   </button>
 ` : ''}
 
