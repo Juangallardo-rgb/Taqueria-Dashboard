@@ -146,17 +146,22 @@ async function verPedidos(esAuto = false) {
 
     const data = await res.json();
 
-    // 🔥 FIX PICKUP RÁPIDO (CORRECTO)
-data.forEach(p => {
+    // 🔥 FIX PICKUP SIN LOOP (CLAVE)
+    window.forzados = window.forzados || new Set();
 
-  const idWoo = p.woo_order_id || p.id;
+    data.forEach(p => {
+      const idWoo = p.woo_order_id || p.id;
 
-  if (!p.items && p.estado_envio === 'pickup' && idWoo && !p._forcing) {
-    p._forcing = true;
-    fetch(`/force-order/${idWoo}`);
-  }
-
-});
+      if (
+        !p.items &&
+        p.estado_envio === 'pickup' &&
+        idWoo &&
+        !window.forzados.has(idWoo)
+      ) {
+        window.forzados.add(idWoo);
+        fetch(`/force-order/${idWoo}`);
+      }
+    });
 
     let pedidosFiltrados = data;
     const ahora = new Date();
@@ -229,18 +234,14 @@ data.forEach(p => {
 
       try {
         if (p.items) {
-
           const items = typeof p.items === "string"
             ? JSON.parse(p.items)
             : p.items;
 
           itemsHTML = items.map(i => {
-
-            const nombre = i.name || i.nombre || 'Producto';
-            const cantidad = i.quantity || i.cantidad || 1;
-
+            const nombre = i.nombre || i.name || 'Producto';
+            const cantidad = i.cantidad || i.quantity || 1;
             return `<div>• ${nombre} x${cantidad}</div>`;
-
           }).join('');
         }
       } catch (e) {
