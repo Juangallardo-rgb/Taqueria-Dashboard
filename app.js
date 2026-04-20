@@ -286,6 +286,12 @@ data.forEach(p => {
 
           <p>📊 Estado: ${p.estado}</p>
 
+${esPickup && p.estado !== 'completed' ? `
+  <button class="btn-completar" onclick="event.stopPropagation(); completarPedido(${p.id})">
+    ✅ Marcar como listo
+  </button>
+` : ''}
+
           ${!esPickup ? `<p>🛵 Driver: ${p.driver_name || "Sin asignar"}</p>` : ''}
 
           ${!esPickup && p.tracking_url ? `
@@ -906,6 +912,21 @@ function limpiarAlertaPedidos() {
     btn.classList.remove('parpadeo');
   }
 }
+async function completarPedido(id) {
+  try {
+
+    await fetch(`/complete-order/${id}`, {
+      method: 'POST'
+    });
+
+    // 🔥 recargar pedidos inmediatamente
+    verPedidos(true);
+
+  } catch (e) {
+    console.error("ERROR COMPLETAR PEDIDO:", e);
+  }
+}
+
 // =====================
 // INIT
 // =====================

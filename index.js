@@ -553,6 +553,51 @@ console.log("⚡ FORCE ORDER:", orderId);
   }
 });
 
+app.post('/complete-order/:id', async (req, res) => {
+  const id = req.params.id;
+
+  try {
+
+    // 🔥 1. TRAER EL woo_order_id REAL
+    const result = await pool.query(
+      `SELECT woo_order_id FROM pedidos WHERE id = $1`,
+      [id]
+    );
+
+    const wooId = result.rows[0]?.woo_order_id;
+
+    // 🔥 2. ACTUALIZAR TU BD
+    await pool.query(
+      `UPDATE pedidos SET estado = 'completed' WHERE id = $1`,
+      [id]
+    );
+
+    // 🔥 3. ACTUALIZAR WOO (CLAVE)
+    if (wooId) {
+      await axios.put(
+        `${WOO_URL}/wp-json/wc/v3/orders/${wooId}`,
+        {
+          status: 'completed'
+        },
+        {
+          auth: {
+            username: CONSUMER_KEY,
+            password: CONSUMER_SECRET
+          }
+        }
+      );
+    }
+
+    console.log("✅ COMPLETADO LOCAL + WOO:", id);
+
+    res.json({ success: true });
+
+  } catch (error) {
+    console.error("❌ ERROR COMPLETAR:", error);
+    res.status(500).send("Error");
+  }
+});
+
 // 🚀 START
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);
