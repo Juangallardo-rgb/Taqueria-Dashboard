@@ -491,29 +491,35 @@ app.get('/force-order/:id', async (req, res) => {
   try {
 
     const wooRes = await axios.get(
-      `${WOO_URL}/wp-json/wc/v3/orders/${orderId}`,
-      {
-        auth: {
-          username: CONSUMER_KEY,
-          password: CONSUMER_SECRET
-        }
-      }
-    );
+  `${WOO_URL}/wp-json/wc/v3/orders?search=${orderId}`,
+  {
+    auth: {
+      username: CONSUMER_KEY,
+      password: CONSUMER_SECRET
+    }
+  }
+);
 
-    const order = wooRes.data;
+// 🔥 tomar la primera coincidencia
+const order = wooRes.data && wooRes.data.length ? wooRes.data[0] : null;
 
-    const items = order.line_items.map(i => {
+if (!order) {
+  throw new Error(`Orden no encontrada en Woo con search=${orderId}`);
+}
 
-      const extras = (i.meta_data || [])
-        .filter(m => m.value && m.value !== '')
-        .map(m => `${m.key}: ${m.value}`)
-        .join(', ');
+// 🔥 procesar items con seguridad
+const items = (order.line_items || []).map(i => {
 
-      return {
-        nombre: `${i.name}${extras ? ` (${extras})` : ''}`,
-        cantidad: i.quantity
-      };
-    });
+  const extras = (i.meta_data || [])
+    .filter(m => m.value && m.value !== '')
+    .map(m => `${m.key}: ${m.value}`)
+    .join(', ');
+
+  return {
+    nombre: `${i.name}${extras ? ` (${extras})` : ''}`,
+    cantidad: i.quantity
+  };
+});
 
     await pool.query(
       `INSERT INTO pedidos 
