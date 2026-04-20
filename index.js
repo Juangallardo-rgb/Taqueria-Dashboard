@@ -490,58 +490,66 @@ app.get('/force-order/:id', async (req, res) => {
 
   try {
 
-    const wooRes = await axios.get(
-  `${WOO_URL}/wp-json/wc/v3/orders?search=${orderId}`,
-  {
-    auth: {
-      username: CONSUMER_KEY,
-      password: CONSUMER_SECRET
+    // 🔥 1. VERIFICAR SI YA TIENE ITEMS (CLAVE PARA EVITAR LOOP)
+    const existing = await pool.query(
+      `SELECT items FROM pedidos WHERE woo_order_id = $1`,
+      [orderId]
+    );
+
+    if (existing.rows.length && existing.rows[0].items && existing.rows[0].items !== '[]') {
+      // 👉 Ya tiene items → NO hacer nada
+      return res.json({ skipped: true });
     }
-  }
-);
 
-// 🔥 tomar la primera coincidencia
-const order = wooRes.data && wooRes.data.length ? wooRes.data[0] : null;
+    // 🔥 2. TRAER ORDEN DESDE WOO
+    const wooRes = await axios.get(
+      `${WOO_URL}/wp-json/wc/v3/orders?search=${orderId}`,
+      {
+        auth: {
+          username: CONSUMER_KEY,
+          password: CONSUMER_SECRET
+        }
+      }
+    );
 
-if (!order) {
-  throw new Error(`Orden no encontrada en Woo con search=${orderId}`);
-}
+    const order = wooRes.data && wooRes.data.length ? wooRes.data[0] : null;
 
-// 🔥 procesar items con seguridad
-const items = (order.line_items || []).map(i => {
+    if (!order) {
+      return res.json({ skipped: true });
+    }
 
-  const extras = (i.meta_data || [])
-    .filter(m => m.value && m.value !== '')
-    .map(m => `${m.key}: ${m.value}`)
-    .join(', ');
+    // 🔥 3. PROCESAR ITEMS
+    const items = (order.line_items || []).map(i => {
 
-  return {
-    nombre: `${i.name}${extras ? ` (${extras})` : ''}`,
-    cantidad: i.quantity
-  };
-});
+      const extras = (i.meta_data || [])
+        .filter(m => m.value && m.value !== '')
+        .map(m => `${m.key}: ${m.value}`)
+        .join(', ');
 
+      return {
+        nombre: `${i.name}${extras ? ` (${extras})` : ''}`,
+        cantidad: i.quantity
+      };
+    });
+
+    // 🔥 4. ACTUALIZAR SOLO SI NO TENÍA ITEMS
     await pool.query(
-      `INSERT INTO pedidos 
-      (restaurante_id, total, estado, woo_order_id, customer_name, items, created_at)
-      VALUES ($1, $2, $3, $4, $5, $6, NOW())
-      ON CONFLICT (woo_order_id)
-      DO UPDATE SET
-        estado = EXCLUDED.estado,
-        total = EXCLUDED.total,
-        customer_name = EXCLUDED.customer_name,
-        items = EXCLUDED.items`,
+      `UPDATE pedidos 
+       SET items = $1,
+           total = $2,
+           estado = $3,
+           customer_name = $4
+       WHERE woo_order_id = $5`,
       [
-        1,
+        JSON.stringify(items),
         order.total,
         order.status,
-        order.id,
         `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
-        JSON.stringify(items)
+        order.id
       ]
     );
 
-    console.log("🔥 PICKUP FORZADO:", orderId);
+    console.log("🔥 PICKUP FORZADO (1 sola vez):", orderId);
 
     res.json({ success: true });
 
