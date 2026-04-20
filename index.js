@@ -498,16 +498,6 @@ app.get('/force-order/:id', async (req, res) => {
 
     if (existing.rows.length) {
       const itemsActual = existing.rows[0].items;
-
-      // 🔥 VALIDACIÓN REAL (CLAVE)
-      if (
-        itemsActual &&
-        itemsActual !== '[]' &&
-        itemsActual !== null &&
-        itemsActual !== ''
-      ) {
-        return res.json({ skipped: true });
-      }
     }
 
     // 🔥 2. TRAER DESDE WOO
@@ -543,16 +533,17 @@ app.get('/force-order/:id', async (req, res) => {
 
     // 🔥 4. GUARDAR SOLO UNA VEZ
     await pool.query(
-      `UPDATE pedidos 
-       SET items = $1
-       WHERE woo_order_id = $2`,
-      [
-        JSON.stringify(items),
-        order.id
-      ]
-    );
+  `UPDATE pedidos 
+   SET items = $1
+   WHERE woo_order_id = $2
+   AND (items IS NULL OR items::text != $1)`,
+  [
+    JSON.stringify(items),
+    order.id
+  ]
+);
 
-    console.log("🔥 PICKUP FORZADO REAL:", orderId);
+console.log("⚡ FORCE ORDER:", orderId);
 
     res.json({ success: true });
 
