@@ -256,41 +256,36 @@ data.forEach(p => {
 
     itemsHTML = items.map(i => {
 
-      let nombre = i.nombre || i.name || 'Producto';
-      const cantidad = i.cantidad || i.quantity || 1;
+      const nombre = i.name || i.nombre || 'Producto';
+      const cantidad = i.quantity || i.cantidad || 1;
 
       let extrasHTML = '';
 
-      if (nombre.includes('(')) {
+      // 🔥 USAR META_DATA REAL
+      if (i.meta_data && i.meta_data.length) {
 
-        const partes = nombre.split('(');
-        nombre = partes[0].trim();
+        const extras = i.meta_data
+          .filter(m => m.value && !String(m.value).includes('[object Object]'))
+          .map(m => {
 
-        let extrasRaw = partes[1].replace(')', '');
+            let label = m.display_key || m.key;
+            let value = m.display_value || m.value;
 
-        const extras = extrasRaw
-          .split(',')
-          .map(e => e.trim())
-          .filter(e =>
-            e &&
-            !e.includes('_wpf_meta') &&
-            !e.includes('[object Object]')
-          );
+            // 🔥 limpiar texto
+            label = label
+              .replace('Choice', '')
+              .replace('Option', '')
+              .replace('Preparation', '')
+              .trim();
 
-        extrasHTML = extras.map(e => {
+            return `
+              <div class="item-extra">
+                • <strong>${label}:</strong> ${value}
+              </div>
+            `;
+          });
 
-          // 🔥 limpiar texto
-          let limpio = e
-            .replace('Choice:', '')
-            .replace('Preparation:', '')
-            .replace('Tortilla:', '🌮 Tortilla:')
-            .replace('Protein:', '🥩 Protein:')
-            .replace('Egg', '🥚 Egg')
-            .replace('Side:', '🍚 Side:')
-            .trim();
-
-          return `<div class="item-extra">${limpio}</div>`;
-        }).join('');
+        extrasHTML = extras.join('');
       }
 
       return `
@@ -299,7 +294,6 @@ data.forEach(p => {
           ${extrasHTML}
         </div>
       `;
-
     }).join('');
   }
 } catch (e) {
