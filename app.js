@@ -266,14 +266,17 @@ data.forEach(p => {
         const partes = nombre.split('(');
         nombre = partes[0].trim();
 
-        let extrasRaw = partes[1].replace(')', '');
+        let extrasRaw = partes.slice(1).join('(').replace(')', '');
 
-        // 🔥 dividir correctamente por campos conocidos
-        const bloques = extrasRaw.split(/(?=Protein|Preparation|Egg|Tortilla|Side|Special)/g);
+        // 🔥 dividir SOLO por etiquetas reales (sin perder info)
+        const bloques = extrasRaw.split(/(?=Protein Choice:|Protein Addition:|Preparation Option:|Egg Preparation Choice:|Tortilla Choice:|Side Choice:|Special requests:)/g);
 
         extrasHTML = bloques.map(e => {
 
-          let limpio = e
+          let limpio = e.trim();
+
+          // 🔥 limpiar SOLO etiquetas visuales (NO valores)
+          limpio = limpio
             .replace('Protein Choice:', '🥩 Protein:')
             .replace('Protein Addition:', '➕ Extra:')
             .replace('Preparation Option:', '🍳 Prep:')
