@@ -808,12 +808,12 @@ body {
 }
 
 .item-title {
-  font-weight: bold;
+  font-weight: 600; /* ligero, no tan pesado */
   margin-bottom: 4px;
 }
 
 .item-extra {
   margin-left: 12px;
   font-size: 13px;
-  color: #555;
+  color: #444;
 }

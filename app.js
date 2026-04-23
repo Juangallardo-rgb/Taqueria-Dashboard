@@ -256,36 +256,42 @@ data.forEach(p => {
 
     itemsHTML = items.map(i => {
 
-      const nombre = i.name || i.nombre || 'Producto';
+      let nombre = i.name || i.nombre || 'Producto';
       const cantidad = i.quantity || i.cantidad || 1;
 
       let extrasHTML = '';
 
-      // 🔥 USAR META_DATA REAL
-      if (i.meta_data && i.meta_data.length) {
+      if (nombre.includes('(')) {
 
-        const extras = i.meta_data
-          .filter(m => m.value && !String(m.value).includes('[object Object]'))
-          .map(m => {
+        const partes = nombre.split('(');
+        nombre = partes[0].trim();
 
-            let label = m.display_key || m.key;
-            let value = m.display_value || m.value;
+        let extrasRaw = partes[1].replace(')', '');
 
-            // 🔥 limpiar texto
-            label = label
-              .replace('Choice', '')
-              .replace('Option', '')
-              .replace('Preparation', '')
-              .trim();
+        const extras = extrasRaw
+          .split(',')
+          .map(e => e.trim())
+          .filter(e =>
+            e &&
+            !e.includes('_wapf_meta') &&
+            !e.includes('[object Object]')
+          );
 
-            return `
-              <div class="item-extra">
-                • <strong>${label}:</strong> ${value}
-              </div>
-            `;
-          });
+        extrasHTML = extras.map(e => {
 
-        extrasHTML = extras.join('');
+          let limpio = e
+            .replace('Protein Choice:', '🥩 Protein:')
+            .replace('Protein Addition:', '➕ Extra:')
+            .replace('Preparation Option:', '🍳 Prep:')
+            .replace('Egg Preparation Choice:', '🥚 Egg:')
+            .replace('Tortilla Choice:', '🌮 Tortilla:')
+            .replace('Side Choice:', '🍚 Side:')
+            .replace('Special requests:', '📝 Nota:')
+            .replace('Choice:', '')
+            .trim();
+
+          return `<div class="item-extra">${limpio}</div>`;
+        }).join('');
       }
 
       return `
