@@ -256,35 +256,40 @@ data.forEach(p => {
 
     itemsHTML = items.map(i => {
 
-      const nombre = i.name || 'Producto';
-      const cantidad = i.quantity || 1;
+      let nombre = i.nombre || i.name || 'Producto';
+      const cantidad = i.cantidad || i.quantity || 1;
 
       let extrasHTML = '';
 
-      if (i.meta_data && i.meta_data.length) {
+      if (nombre.includes('(')) {
 
-        extrasHTML = i.meta_data
-          .filter(m => m.value && !String(m.value).includes('[object Object]'))
-          .map(m => {
+        const partes = nombre.split('(');
+        nombre = partes[0].trim();
 
-            let label = m.key;
+        let extrasRaw = partes[1].replace(')', '');
 
-            let limpio = label
-              .replace('Protein Choice', '🥩 Protein')
-              .replace('Protein Addition', '➕ Extra')
-              .replace('Preparation Option', '🍳 Prep')
-              .replace('Egg Preparation Choice', '🥚 Egg')
-              .replace('Tortilla Choice', '🌮 Tortilla')
-              .replace('Side Choice', '🍚 Side')
-              .replace('Special requests', '📝 Nota')
-              .trim();
+        // 🔥 dividir correctamente por campos conocidos
+        const bloques = extrasRaw.split(/(?=Protein|Preparation|Egg|Tortilla|Side|Special)/g);
 
-            return `
-              <div class="item-extra">
-                ${limpio}: ${m.value}
-              </div>
-            `;
-          }).join('');
+        extrasHTML = bloques.map(e => {
+
+          let limpio = e
+            .replace('Protein Choice:', '🥩 Protein:')
+            .replace('Protein Addition:', '➕ Extra:')
+            .replace('Preparation Option:', '🍳 Prep:')
+            .replace('Egg Preparation Choice:', '🥚 Egg:')
+            .replace('Tortilla Choice:', '🌮 Tortilla:')
+            .replace('Side Choice:', '🍚 Side:')
+            .replace('Special requests:', '📝 Nota:')
+            .replace('_wapf_meta:', '')
+            .replace('[object Object]', '')
+            .trim();
+
+          if (!limpio) return '';
+
+          return `<div class="item-extra">${limpio}</div>`;
+
+        }).join('');
       }
 
       return `
