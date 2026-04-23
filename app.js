@@ -249,20 +249,47 @@ data.forEach(p => {
       let itemsHTML = "Sin detalle";
 
       try {
-        if (p.items) {
-          const items = typeof p.items === "string"
-            ? JSON.parse(p.items)
-            : p.items;
+  if (p.items) {
+    const items = typeof p.items === "string"
+      ? JSON.parse(p.items)
+      : p.items;
 
-          itemsHTML = items.map(i => {
-            const nombre = i.nombre || i.name || 'Producto';
-            const cantidad = i.cantidad || i.quantity || 1;
-            return `<div>• ${nombre} x${cantidad}</div>`;
-          }).join('');
-        }
-      } catch (e) {
-        console.error("ERROR ITEMS:", e);
+    itemsHTML = items.map(i => {
+
+      let nombre = i.nombre || i.name || 'Producto';
+      const cantidad = i.cantidad || i.quantity || 1;
+
+      let extrasHTML = '';
+
+      // 🔥 detectar si tiene extras dentro del nombre
+      if (nombre.includes('(')) {
+
+        const partes = nombre.split('(');
+        nombre = partes[0].trim();
+
+        const extrasRaw = partes[1].replace(')', '');
+
+        const extras = extrasRaw
+          .split('|')
+          .map(e => e.trim())
+          .filter(e => e && !e.includes('_wpf_meta')); // quitar basura
+
+        extrasHTML = extras.map(e => `
+          <div class="item-extra">- ${e}</div>
+        `).join('');
       }
+
+      return `
+        <div class="item-line">
+          • ${nombre} x${cantidad}
+          ${extrasHTML}
+        </div>
+      `;
+    }).join('');
+  }
+} catch (e) {
+  console.error("ERROR ITEMS:", e);
+}
 
       contenedor.innerHTML += `
         <div class="card ${!pedidosVistos.includes(p.id) ? 'nuevo' : ''}" onclick="marcarComoVisto(${p.id}, this)">

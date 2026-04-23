@@ -790,3 +790,13 @@ body {
 .btn-completar:hover {
   background: #218838;
 }
+
+.item-line {
+  margin-bottom: 6px;
+}
+
+.item-extra {
+  margin-left: 14px;
+  font-size: 13px;
+  color: #555;
+}
