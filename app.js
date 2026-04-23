@@ -256,42 +256,35 @@ data.forEach(p => {
 
     itemsHTML = items.map(i => {
 
-      let nombre = i.name || i.nombre || 'Producto';
-      const cantidad = i.quantity || i.cantidad || 1;
+      const nombre = i.name || 'Producto';
+      const cantidad = i.quantity || 1;
 
       let extrasHTML = '';
 
-      if (nombre.includes('(')) {
+      if (i.meta_data && i.meta_data.length) {
 
-        const partes = nombre.split('(');
-        nombre = partes[0].trim();
+        extrasHTML = i.meta_data
+          .filter(m => m.value && !String(m.value).includes('[object Object]'))
+          .map(m => {
 
-        let extrasRaw = partes[1].replace(')', '');
+            let label = m.key;
 
-        const extras = extrasRaw
-          .split(',')
-          .map(e => e.trim())
-          .filter(e =>
-            e &&
-            !e.includes('_wapf_meta') &&
-            !e.includes('[object Object]')
-          );
+            let limpio = label
+              .replace('Protein Choice', '🥩 Protein')
+              .replace('Protein Addition', '➕ Extra')
+              .replace('Preparation Option', '🍳 Prep')
+              .replace('Egg Preparation Choice', '🥚 Egg')
+              .replace('Tortilla Choice', '🌮 Tortilla')
+              .replace('Side Choice', '🍚 Side')
+              .replace('Special requests', '📝 Nota')
+              .trim();
 
-        extrasHTML = extras.map(e => {
-
-          let limpio = e
-            .replace('Protein Choice:', '🥩 Protein:')
-            .replace('Protein Addition:', '➕ Extra:')
-            .replace('Preparation Option:', '🍳 Prep:')
-            .replace('Egg Preparation Choice:', '🥚 Egg:')
-            .replace('Tortilla Choice:', '🌮 Tortilla:')
-            .replace('Side Choice:', '🍚 Side:')
-            .replace('Special requests:', '📝 Nota:')
-            .replace('Choice:', '')
-            .trim();
-
-          return `<div class="item-extra">${limpio}</div>`;
-        }).join('');
+            return `
+              <div class="item-extra">
+                ${limpio}: ${m.value}
+              </div>
+            `;
+          }).join('');
       }
 
       return `
