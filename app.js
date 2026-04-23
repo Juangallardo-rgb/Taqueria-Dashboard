@@ -261,30 +261,45 @@ data.forEach(p => {
 
       let extrasHTML = '';
 
-      // 🔥 detectar si tiene extras dentro del nombre
       if (nombre.includes('(')) {
 
         const partes = nombre.split('(');
         nombre = partes[0].trim();
 
-        const extrasRaw = partes[1].replace(')', '');
+        let extrasRaw = partes[1].replace(')', '');
 
         const extras = extrasRaw
-          .split('|')
+          .split(',')
           .map(e => e.trim())
-          .filter(e => e && !e.includes('_wpf_meta')); // quitar basura
+          .filter(e =>
+            e &&
+            !e.includes('_wpf_meta') &&
+            !e.includes('[object Object]')
+          );
 
-        extrasHTML = extras.map(e => `
-          <div class="item-extra">- ${e}</div>
-        `).join('');
+        extrasHTML = extras.map(e => {
+
+          // 🔥 limpiar texto
+          let limpio = e
+            .replace('Choice:', '')
+            .replace('Preparation:', '')
+            .replace('Tortilla:', '🌮 Tortilla:')
+            .replace('Protein:', '🥩 Protein:')
+            .replace('Egg', '🥚 Egg')
+            .replace('Side:', '🍚 Side:')
+            .trim();
+
+          return `<div class="item-extra">${limpio}</div>`;
+        }).join('');
       }
 
       return `
-        <div class="item-line">
-          • ${nombre} x${cantidad}
+        <div class="item-card">
+          <div class="item-title">🍽 ${nombre} x${cantidad}</div>
           ${extrasHTML}
         </div>
       `;
+
     }).join('');
   }
 } catch (e) {
