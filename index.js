@@ -293,6 +293,10 @@ app.get('/shipday-live', (req, res) => {
 // ===============================
 app.get('/orders-complete', async (req, res) => {
   try {
+
+    // 🔥 OBTENER RESTAURANTE ACTUAL (SAFE)
+    const restaurante_id = req.session?.restaurante_id || 1;
+
     const result = await pool.query(`
       SELECT 
         p.id,
@@ -303,7 +307,7 @@ app.get('/orders-complete', async (req, res) => {
         p.created_at,
         d.driver_name,
 
-        -- 🔥 FIX AQUÍ
+        -- 🔥 DETECCIÓN PICKUP / DELIVERY (NO TOCAR)
         CASE 
           WHEN d.order_number IS NULL THEN 'pickup'
           ELSE 'delivery'
@@ -313,11 +317,16 @@ app.get('/orders-complete', async (req, res) => {
         d.tracking_url,
         d.picked_up_at,
         d.delivered_at
+
       FROM pedidos p
       LEFT JOIN deliveries d
-      ON d.order_number = p.woo_order_id
+        ON d.order_number = p.woo_order_id
+
+      -- 🔥 FILTRO MULTI-RESTAURANTE (CLAVE)
+      WHERE p.restaurante_id = $1
+
       ORDER BY p.created_at DESC
-    `);
+    `, [restaurante_id]);
 
     res.json(result.rows);
 
