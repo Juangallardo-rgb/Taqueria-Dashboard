@@ -453,7 +453,16 @@ app.post('/login', async (req, res) => {
     );
 
     if (result.rows.length > 0) {
+
+      const user = result.rows[0];
+
+      // 🔥 CLAVE PARA MULTI-RESTAURANTE
+      req.session.restaurante_id = user.restaurante_id || 1;
+
+      console.log("RESTAURANTE LOGUEADO:", req.session.restaurante_id);
+
       res.json({ success: true });
+
     } else {
       res.json({ success: false });
     }
