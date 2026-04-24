@@ -25,6 +25,17 @@ const CONSUMER_SECRET = 'cs_f0a533f8a25ec307a44126e421e2088b0b27f57a';
 let wooOrders = [];
 let shipdayOrders = [];
 
+const session = require('express-session');
+
+app.use(session({
+  secret: 'secreto-super', // puedes cambiarlo luego
+  resave: false,
+  saveUninitialized: true,
+  cookie: {
+    secure: false // ⚠️ en Render está bien así
+  }
+}));
+
 // 🏠 HOME
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
