@@ -181,11 +181,14 @@ app.post('/webhook-shipday', async (req, res) => {
 
   try {
 
-    // 🔥 1. GUARDAR DELIVERY (COMO YA TENÍAS)
+    // 🔥 RESTAURANTE DINÁMICO (CLAVE SaaS)
+    const restaurante_id = req.query.restaurante || 1;
+
+    // 🔥 1. GUARDAR DELIVERY (SIN ROMPER TU LÓGICA)
     await pool.query(
       `INSERT INTO deliveries 
-      (order_number, driver_name, status, delivery_cost, tracking_url, picked_up_at, delivered_at)
-      VALUES ($1,$2,$3,$4,$5,$6,$7)
+      (restaurante_id, order_number, driver_name, status, delivery_cost, tracking_url, picked_up_at, delivered_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
       ON CONFLICT (order_number)
       DO UPDATE SET
         driver_name = COALESCE(EXCLUDED.driver_name, deliveries.driver_name),
@@ -195,6 +198,7 @@ app.post('/webhook-shipday', async (req, res) => {
         picked_up_at = EXCLUDED.picked_up_at,
         delivered_at = EXCLUDED.delivered_at`,
       [
+        restaurante_id,
         String(orderNumber),
         driverName,
         data.order_status,
@@ -205,9 +209,9 @@ app.post('/webhook-shipday', async (req, res) => {
       ]
     );
 
-    console.log("🚚 SHIPDAY OK (delivery actualizado)");
+    console.log("🚚 SHIPDAY OK (delivery actualizado) - REST:", restaurante_id);
 
-    // 🔥 2. TRAER PEDIDO COMPLETO DESDE WOO (RÁPIDO)
+    // 🔥 2. TRAER PEDIDO COMPLETO DESDE WOO (MISMA LÓGICA)
     if (orderNumber) {
 
       setTimeout(async () => {
@@ -244,7 +248,7 @@ app.post('/webhook-shipday', async (req, res) => {
             };
           });
 
-          // 🔥 3. INSERTAR PEDIDO COMPLETO (UNA SOLA VEZ)
+          // 🔥 3. INSERTAR PEDIDO COMPLETO (AHORA CON RESTAURANTE)
           await pool.query(
             `INSERT INTO pedidos 
             (restaurante_id, total, estado, woo_order_id, customer_name, items, created_at)
@@ -256,7 +260,7 @@ app.post('/webhook-shipday', async (req, res) => {
               customer_name = EXCLUDED.customer_name,
               items = EXCLUDED.items`,
             [
-              1,
+              restaurante_id,
               order.total,
               order.status,
               order.id,
@@ -265,13 +269,13 @@ app.post('/webhook-shipday', async (req, res) => {
             ]
           );
 
-          console.log("🔥 PEDIDO COMPLETO GUARDADO DESDE SHIPDAY");
+          console.log("🔥 PEDIDO COMPLETO GUARDADO DESDE SHIPDAY - REST:", restaurante_id);
 
         } catch (err) {
           console.log("❌ ERROR WOO DESDE SHIPDAY:", err.message);
         }
 
-      }, 2000); // 🔥 pequeño delay para que Woo esté listo
+      }, 2000);
     }
 
     res.sendStatus(200);
@@ -282,7 +286,6 @@ app.post('/webhook-shipday', async (req, res) => {
   }
 
 });
-
 
 // ===============================
 // 📡 VER SHIPDAY
