@@ -118,6 +118,9 @@ app.post('/webhook-order', async (req, res) => {
 
   try {
 
+    // 🔥 RESTAURANTE DINÁMICO (CLAVE SaaS)
+    const restaurante_id = req.query.restaurante || 1;
+
     const items = (order.line_items || []).map(i => {
 
       const extras = (i.meta_data || [])
@@ -132,16 +135,17 @@ app.post('/webhook-order', async (req, res) => {
     });
 
     await pool.query(
-      `INSERT INTO pedidos (restaurante_id, total, estado, woo_order_id, customer_name, items)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (woo_order_id)
-       DO UPDATE SET
-         estado = EXCLUDED.estado,
-         total = EXCLUDED.total,
-         customer_name = EXCLUDED.customer_name,
-         items = EXCLUDED.items`,
+      `INSERT INTO pedidos 
+      (restaurante_id, total, estado, woo_order_id, customer_name, items, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      ON CONFLICT (woo_order_id)
+      DO UPDATE SET
+        estado = EXCLUDED.estado,
+        total = EXCLUDED.total,
+        customer_name = EXCLUDED.customer_name,
+        items = EXCLUDED.items`,
       [
-        1,
+        restaurante_id, // 🔥 CAMBIO CLAVE
         order.total,
         order.status,
         order.id,
@@ -150,7 +154,7 @@ app.post('/webhook-order', async (req, res) => {
       ]
     );
 
-    console.log("✅ WOO GUARDADO CON ITEMS");
+    console.log("✅ WOO GUARDADO CON ITEMS - REST:", restaurante_id);
 
     res.sendStatus(200);
 
