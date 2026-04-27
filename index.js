@@ -476,12 +476,15 @@ app.post('/login', async (req, res) => {
 
       const user = result.rows[0];
 
-      // 🔥 CLAVE PARA MULTI-RESTAURANTE
       req.session.restaurante_id = user.restaurante_id || 1;
+      req.session.rol = user.rol || 'cliente';
 
-      console.log("RESTAURANTE LOGUEADO:", req.session.restaurante_id);
+      console.log("LOGIN:", user.email, "ROL:", user.rol);
 
-      res.json({ success: true });
+      res.json({
+        success: true,
+        rol: user.rol
+      });
 
     } else {
       res.json({ success: false });
@@ -492,6 +495,16 @@ app.post('/login', async (req, res) => {
     res.status(500).send('Error login');
   }
 });
+
+app.get('/admin', (req, res) => {
+
+  if (req.session.rol !== 'admin') {
+    return res.send("No autorizado");
+  }
+
+  res.sendFile(__dirname + '/admin.html');
+});
+
 app.get('/estado-restaurante', async (req, res) => {
 
   const result = await pool.query(
