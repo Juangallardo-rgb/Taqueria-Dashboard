@@ -704,6 +704,50 @@ app.get('/admin/usuarios', async (req, res) => {
 
 });
 
+app.post('/refund', async (req, res) => {
+
+  const { orderId, amount } = req.body;
+
+  try {
+
+    const wooRes = await axios.get(
+      `${WOO_URL}/wp-json/wc/v3/orders/${orderId}`,
+      {
+        auth: {
+          username: CONSUMER_KEY,
+          password: CONSUMER_SECRET
+        }
+      }
+    );
+
+    const order = wooRes.data;
+
+    if (!order.transaction_id) {
+      return res.json({ success: false });
+    }
+
+    await axios.post(
+      `${WOO_URL}/wp-json/wc/v3/orders/${orderId}/refunds`,
+      {
+        amount: amount,
+        reason: "Refund desde dashboard"
+      },
+      {
+        auth: {
+          username: CONSUMER_KEY,
+          password: CONSUMER_SECRET
+        }
+      }
+    );
+
+    res.json({ success: true });
+
+  } catch (error) {
+    console.error(error.response?.data || error.message);
+    res.json({ success: false });
+  }
+});
+
 // 🚀 START
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);

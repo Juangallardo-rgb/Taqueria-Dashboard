@@ -308,45 +308,50 @@ data.forEach(p => {
 }
 
       contenedor.innerHTML += `
-        <div class="card ${!pedidosVistos.includes(p.id) ? 'nuevo' : ''}" onclick="marcarComoVisto(${p.id}, this)">
+  <div class="card ${!pedidosVistos.includes(p.id) ? 'nuevo' : ''}" onclick="marcarComoVisto(${p.id}, this)">
 
-          ${esPickup 
-            ? `<div class="badge-pickup">👜 PICKUP</div>` 
-            : `<div class="badge-delivery">🚚 DELIVERY</div>`}
+    ${esPickup 
+      ? `<div class="badge-pickup">👜 PICKUP</div>` 
+      : `<div class="badge-delivery">🚚 DELIVERY</div>`}
 
-          <h3>Pedido #${p.id}</h3>
+    <h3>Pedido #${p.id}</h3>
 
-          <p>🕒 ${new Date(p.created_at).toLocaleString()}</p>
+    <p>🕒 ${new Date(p.created_at).toLocaleString()}</p>
 
-          <p>👤 Cliente: ${p.customer_name || 'Cliente'}</p>
+    <p>👤 Cliente: ${p.customer_name || 'Cliente'}</p>
 
-          <div>
-            <strong>🍽 Detalle:</strong>
-            ${itemsHTML}
-          </div>
+    <div>
+      <strong>🍽 Detalle:</strong>
+      ${itemsHTML}
+    </div>
 
-          <p>💰 Total: $${p.total}</p>
+    <p>💰 Total: $${p.total}</p>
 
-          <p>📊 Estado: ${p.estado}</p>
+    <p>📊 Estado: ${p.estado}</p>
 
-${esPickup && p.estado !== 'completed' ? `
-  <button class="btn-completar" onclick="event.stopPropagation(); completarPedido(${p.id})">
-    ✅ COMPLETADO
-  </button>
-` : ''}
+    ${esPickup && p.estado !== 'completed' ? `
+      <button class="btn-completar" onclick="event.stopPropagation(); completarPedido(${p.id})">
+        ✅ COMPLETADO
+      </button>
+    ` : ''}
 
-          ${!esPickup ? `<p>🛵 Driver: ${p.driver_name || "Sin asignar"}</p>` : ''}
+    ${!esPickup ? `<p>🛵 Driver: ${p.driver_name || "Sin asignar"}</p>` : ''}
 
-          ${!esPickup && p.tracking_url ? `
-            <a href="${p.tracking_url}" target="_blank" class="btn-tracking">
-              📍 Ver seguimiento
-            </a>
-          ` : ''}
+    ${!esPickup && p.tracking_url ? `
+      <a href="${p.tracking_url}" target="_blank" class="btn-tracking">
+        📍 Ver seguimiento
+      </a>
+    ` : ''}
 
-        </div>
-      `;
+    <!-- 🔥 BOTÓN REFUND -->
+    <button onclick="event.stopPropagation(); abrirRefund(${p.woo_order_id}, ${p.total})"
+            style="background:#dc3545;color:white;padding:8px;border:none;border-radius:6px;margin-top:10px;">
+      💸 Refund
+    </button>
+
+  </div>
+`;
     });
-
   } catch (error) {
     console.error("ERROR PEDIDOS:", error);
     contenedor.innerHTML = "<p>Error cargando pedidos</p>";
@@ -969,7 +974,51 @@ async function completarPedido(id) {
     console.error("ERROR COMPLETAR PEDIDO:", e);
   }
 }
+let currentOrderId = null;
 
+function abrirRefund(orderId, total) {
+  currentOrderId = orderId;
+  document.getElementById('refundAmount').value = total;
+  document.getElementById('refundModal').style.display = 'block';
+}
+
+function cerrarRefund() {
+  document.getElementById('refundModal').style.display = 'none';
+}
+
+async function confirmarRefund() {
+
+  const amount = document.getElementById('refundAmount').value;
+
+  if (!amount) {
+    alert("Ingresa monto");
+    return;
+  }
+
+  const ok = confirm(`⚠️ ¿Seguro quieres reembolsar $${amount}?`);
+
+  if (!ok) return;
+
+  const res = await fetch('/refund', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      orderId: currentOrderId,
+      amount
+    })
+  });
+
+  const data = await res.json();
+
+  if (data.success) {
+    alert("✅ Reembolso realizado");
+    cerrarRefund();
+  } else {
+    alert("❌ Error en reembolso");
+  }
+}
 // =====================
 // INIT
 // =====================

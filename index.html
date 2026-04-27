@@ -63,6 +63,23 @@
 
   </div>
 
+  <div id="refundModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5);">
+
+  <div style="background:white; padding:20px; margin:10% auto; width:300px; border-radius:8px;">
+
+    <h3>Reembolso</h3>
+
+    <input id="refundAmount" type="number" placeholder="Monto" style="width:100%; padding:8px;">
+
+    <br><br>
+
+    <button onclick="confirmarRefund()">Reembolsar</button>
+    <button onclick="cerrarRefund()">Cancelar</button>
+
+  </div>
+
+</div>
+
   <!-- MAIN -->
   <div class="main">
 
