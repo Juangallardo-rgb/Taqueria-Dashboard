@@ -2,31 +2,98 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Admin - Restaurantes</title>
+  <title>Admin - Sistema</title>
+
+  <style>
+    body {
+      font-family: Arial;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+
+    h1, h2 {
+      margin-top: 30px;
+    }
+
+    input {
+      display: block;
+      margin: 5px 0;
+      padding: 8px;
+      width: 300px;
+    }
+
+    button {
+      padding: 10px;
+      background: #28a745;
+      color: white;
+      border: none;
+      cursor: pointer;
+      margin-top: 5px;
+    }
+
+    .card {
+      background: white;
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+    }
+  </style>
 </head>
+
 <body>
 
 <h1>Panel Admin</h1>
 
+<!-- ========================= -->
+<!-- CREAR RESTAURANTE -->
+<!-- ========================= -->
+
 <h2>Crear Restaurante</h2>
 
-<input id="nombre" placeholder="Nombre"><br>
-<input id="logo" placeholder="URL Logo"><br>
-<input id="woo" placeholder="Woo URL"><br>
-<input id="ck" placeholder="Consumer Key"><br>
-<input id="cs" placeholder="Consumer Secret"><br>
-<input id="shipday" placeholder="Shipday API"><br>
+<input id="nombre" placeholder="Nombre">
+<input id="logo" placeholder="URL Logo">
+<input id="woo" placeholder="Woo URL">
+<input id="ck" placeholder="Consumer Key">
+<input id="cs" placeholder="Consumer Secret">
+<input id="shipday" placeholder="Shipday API">
 
-<button onclick="crearRestaurante()">Crear</button>
+<button onclick="crearRestaurante()">Crear Restaurante</button>
 
 <hr>
 
 <h2>Restaurantes</h2>
 <div id="lista"></div>
 
+<!-- ========================= -->
+<!-- CREAR USUARIO -->
+<!-- ========================= -->
+
+<h2>Crear Usuario</h2>
+
+<input id="emailUser" placeholder="Email">
+<input id="passUser" placeholder="Password">
+<input id="restUser" placeholder="ID Restaurante">
+
+<button onclick="crearUsuario()">Crear Usuario</button>
+
+<hr>
+
+<h2>Usuarios</h2>
+<div id="listaUsuarios"></div>
+
+<!-- ========================= -->
+<!-- SCRIPT -->
+<!-- ========================= -->
+
 <script>
 
+/////////////////////////////
+// RESTAURANTES
+/////////////////////////////
+
 async function crearRestaurante() {
+
   const data = {
     nombre: document.getElementById('nombre').value,
     logo_url: document.getElementById('logo').value,
@@ -43,10 +110,24 @@ async function crearRestaurante() {
   });
 
   alert('Restaurante creado');
+
+  limpiarCamposRestaurante();
   cargarRestaurantes();
 }
 
+
+function limpiarCamposRestaurante() {
+  document.getElementById('nombre').value = '';
+  document.getElementById('logo').value = '';
+  document.getElementById('woo').value = '';
+  document.getElementById('ck').value = '';
+  document.getElementById('cs').value = '';
+  document.getElementById('shipday').value = '';
+}
+
+
 async function cargarRestaurantes() {
+
   const res = await fetch('/admin/restaurantes');
   const data = await res.json();
 
@@ -55,7 +136,7 @@ async function cargarRestaurantes() {
 
   data.forEach(r => {
     cont.innerHTML += `
-      <div style="border:1px solid #ccc; margin:10px; padding:10px;">
+      <div class="card">
         <b>${r.nombre}</b><br>
         ID: ${r.id}<br>
         Woo: ${r.woo_url}
@@ -64,7 +145,64 @@ async function cargarRestaurantes() {
   });
 }
 
+
+/////////////////////////////
+// USUARIOS
+/////////////////////////////
+
+async function crearUsuario() {
+
+  const data = {
+    email: document.getElementById('emailUser').value,
+    password: document.getElementById('passUser').value,
+    restaurante_id: document.getElementById('restUser').value
+  };
+
+  await fetch('/admin/usuarios', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+
+  alert('Usuario creado');
+
+  limpiarCamposUsuario();
+  cargarUsuarios();
+}
+
+
+function limpiarCamposUsuario() {
+  document.getElementById('emailUser').value = '';
+  document.getElementById('passUser').value = '';
+  document.getElementById('restUser').value = '';
+}
+
+
+async function cargarUsuarios() {
+
+  const res = await fetch('/admin/usuarios');
+  const data = await res.json();
+
+  const cont = document.getElementById('listaUsuarios');
+  cont.innerHTML = '';
+
+  data.forEach(u => {
+    cont.innerHTML += `
+      <div class="card">
+        <b>${u.email}</b><br>
+        Restaurante: ${u.nombre} (ID ${u.restaurante_id})
+      </div>
+    `;
+  });
+}
+
+
+/////////////////////////////
+// INIT
+/////////////////////////////
+
 cargarRestaurantes();
+cargarUsuarios();
 
 </script>
 

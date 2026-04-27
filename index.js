@@ -657,6 +657,39 @@ app.get('/admin/restaurantes', async (req, res) => {
   res.json(result.rows);
 
 });
+app.post('/admin/usuarios', async (req, res) => {
+
+  const { email, password, restaurante_id } = req.body;
+
+  try {
+
+    await pool.query(
+      `INSERT INTO usuarios (email, password, restaurante_id)
+       VALUES ($1, $2, $3)`,
+      [email, password, restaurante_id]
+    );
+
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error');
+  }
+
+});
+
+app.get('/admin/usuarios', async (req, res) => {
+
+  const result = await pool.query(`
+    SELECT u.id, u.email, u.restaurante_id, r.nombre 
+    FROM usuarios u
+    LEFT JOIN restaurantes r ON r.id = u.restaurante_id
+    ORDER BY u.id DESC
+  `);
+
+  res.json(result.rows);
+
+});
 
 // 🚀 START
 app.listen(PORT, () => {
