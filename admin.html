@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin - Restaurantes</title>
+</head>
+<body>
+
+<h1>Panel Admin</h1>
+
+<h2>Crear Restaurante</h2>
+
+<input id="nombre" placeholder="Nombre"><br>
+<input id="logo" placeholder="URL Logo"><br>
+<input id="woo" placeholder="Woo URL"><br>
+<input id="ck" placeholder="Consumer Key"><br>
+<input id="cs" placeholder="Consumer Secret"><br>
+<input id="shipday" placeholder="Shipday API"><br>
+
+<button onclick="crearRestaurante()">Crear</button>
+
+<hr>
+
+<h2>Restaurantes</h2>
+<div id="lista"></div>
+
+<script>
+
+async function crearRestaurante() {
+  const data = {
+    nombre: document.getElementById('nombre').value,
+    logo_url: document.getElementById('logo').value,
+    woo_url: document.getElementById('woo').value,
+    consumer_key: document.getElementById('ck').value,
+    consumer_secret: document.getElementById('cs').value,
+    shipday_api: document.getElementById('shipday').value
+  };
+
+  await fetch('/admin/restaurantes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+
+  alert('Restaurante creado');
+  cargarRestaurantes();
+}
+
+async function cargarRestaurantes() {
+  const res = await fetch('/admin/restaurantes');
+  const data = await res.json();
+
+  const cont = document.getElementById('lista');
+  cont.innerHTML = '';
+
+  data.forEach(r => {
+    cont.innerHTML += `
+      <div style="border:1px solid #ccc; margin:10px; padding:10px;">
+        <b>${r.nombre}</b><br>
+        ID: ${r.id}<br>
+        Woo: ${r.woo_url}
+      </div>
+    `;
+  });
+}
+
+cargarRestaurantes();
+
+</script>
+
+</body>
+</html>
