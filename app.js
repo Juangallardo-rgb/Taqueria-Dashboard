@@ -1016,7 +1016,6 @@ window.cerrarRefund = function() {
 
   modal.classList.remove('active');
 
-  // 🔥 resetear pasos
   document.getElementById('refundStep1').style.display = 'block';
   document.getElementById('refundStepTotal').style.display = 'none';
   document.getElementById('refundStepParcial').style.display = 'none';
