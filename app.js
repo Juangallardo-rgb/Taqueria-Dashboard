@@ -6,6 +6,8 @@ let tabActual = 'recientes';
 let ultimoPedidoId = null;
 let ultimoPedidoGlobal = null;
 let audioPedido = new Audio('/sonido.mp3');
+let currentOrderId = null;
+let currentOrderTotal = 0;
 
 window.viendoPedidos = false;
 
@@ -987,45 +989,39 @@ async function completarPedido(id) {
 let currentOrderId = null;
 
 function abrirRefund(orderId, total) {
-
   currentOrderId = orderId;
+  currentOrderTotal = total;
 
-  const esTotal = confirm("¿Reembolso TOTAL?\nAceptar = Total\nCancelar = Parcial");
+  // reset pasos
+  document.getElementById('refundStep1').style.display = 'block';
+  document.getElementById('refundStepTotal').style.display = 'none';
+  document.getElementById('refundStepParcial').style.display = 'none';
 
-  if (esTotal) {
-    document.getElementById('refundAmount').value = total;
-  } else {
-    document.getElementById('refundAmount').value = '';
-  }
+  document.getElementById('refundModal').classList.add('active');
+}
 
-  document.getElementById('refundModal').style.display = 'block';
+function seleccionarTotal() {
+  document.getElementById('refundStep1').style.display = 'none';
+  document.getElementById('refundStepTotal').style.display = 'block';
+}
+
+function seleccionarParcial() {
+  document.getElementById('refundStep1').style.display = 'none';
+  document.getElementById('refundStepParcial').style.display = 'block';
 }
 
 function cerrarRefund() {
   document.getElementById('refundModal').style.display = 'none';
 }
 
-async function confirmarRefund() {
-
-  const amount = document.getElementById('refundAmount').value;
-
-  if (!amount) {
-    alert("Ingresa monto");
-    return;
-  }
-
-  const ok = confirm(`⚠️ ¿Seguro quieres reembolsar $${amount}?`);
-  if (!ok) return;
-
+async function hacerRefund(woo_order_id, amount) {
   try {
 
     const res = await fetch('/refund', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        woo_order_id: currentOrderId, // 🔥 CORREGIDO
+        woo_order_id,
         amount
       })
     });
@@ -1035,7 +1031,7 @@ async function confirmarRefund() {
     if (data.success) {
       alert("✅ Reembolso realizado");
       cerrarRefund();
-      verPedidos(true); // 🔥 refresca UI
+      verPedidos(true);
     } else {
       alert(data.message || "❌ Error en reembolso");
     }
@@ -1044,6 +1040,20 @@ async function confirmarRefund() {
     console.error(e);
     alert("Error de conexión");
   }
+}
+async function confirmarRefundTotal() {
+  await hacerRefund(currentOrderId, currentOrderTotal);
+}
+async function confirmarRefundParcial() {
+
+  const amount = document.getElementById('refundAmount').value;
+
+  if (!amount || isNaN(amount)) {
+    alert("Monto inválido");
+    return;
+  }
+
+  await hacerRefund(currentOrderId, amount);
 }
 // =====================
 // INIT
