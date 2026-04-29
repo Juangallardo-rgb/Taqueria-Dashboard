@@ -1011,9 +1011,18 @@ function seleccionarParcial() {
   document.getElementById('refundStepParcial').style.display = 'block';
 }
 
-function cerrarRefund() {
-  document.getElementById('refundModal').style.display = 'none';
-}
+window.cerrarRefund = function() {
+  const modal = document.getElementById('refundModal');
+
+  modal.classList.remove('active');
+
+  // 🔥 resetear pasos
+  document.getElementById('refundStep1').style.display = 'block';
+  document.getElementById('refundStepTotal').style.display = 'none';
+  document.getElementById('refundStepParcial').style.display = 'none';
+
+  document.getElementById('refundAmount').value = '';
+};
 
 async function hacerRefund(woo_order_id, amount) {
   try {
