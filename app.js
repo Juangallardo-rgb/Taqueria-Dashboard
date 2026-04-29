@@ -6,8 +6,7 @@ let tabActual = 'recientes';
 let ultimoPedidoId = null;
 let ultimoPedidoGlobal = null;
 let audioPedido = new Audio('/sonido.mp3');
-let currentOrderId = null;
-let currentOrderTotal = 0;
+
 
 window.viendoPedidos = false;
 
