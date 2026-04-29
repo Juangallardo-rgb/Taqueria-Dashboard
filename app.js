@@ -6,6 +6,8 @@ let tabActual = 'recientes';
 let ultimoPedidoId = null;
 let ultimoPedidoGlobal = null;
 let audioPedido = new Audio('/sonido.mp3');
+window.currentOrderId = null;
+window.currentOrderTotal = 0;
 
 
 window.viendoPedidos = false;
@@ -988,10 +990,10 @@ async function completarPedido(id) {
 let currentOrderId = null;
 
 function abrirRefund(orderId, total) {
-  currentOrderId = orderId;
-  currentOrderTotal = total;
 
-  // reset pasos
+  window.currentOrderId = orderId;
+  window.currentOrderTotal = total;
+
   document.getElementById('refundStep1').style.display = 'block';
   document.getElementById('refundStepTotal').style.display = 'none';
   document.getElementById('refundStepParcial').style.display = 'none';
@@ -1041,7 +1043,7 @@ async function hacerRefund(woo_order_id, amount) {
   }
 }
 async function confirmarRefundTotal() {
-  await hacerRefund(currentOrderId, currentOrderTotal);
+  await hacerRefund(window.currentOrderId, window.currentOrderTotal);
 }
 async function confirmarRefundParcial() {
 
@@ -1052,7 +1054,7 @@ async function confirmarRefundParcial() {
     return;
   }
 
-  await hacerRefund(currentOrderId, amount);
+  await hacerRefund(window.currentOrderId, amount);
 }
 // =====================
 // INIT
