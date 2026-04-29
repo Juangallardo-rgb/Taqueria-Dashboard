@@ -989,7 +989,7 @@ async function completarPedido(id) {
 }
 let currentOrderId = null;
 
-function abrirRefund(orderId, total) {
+window.abrirRefund = function(orderId, total) {
 
   window.currentOrderId = orderId;
   window.currentOrderTotal = total;
