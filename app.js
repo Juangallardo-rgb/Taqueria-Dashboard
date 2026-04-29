@@ -1065,6 +1065,13 @@ async function confirmarRefundParcial() {
 
   await hacerRefund(window.currentOrderId, amount);
 }
+window.onclick = function(e) {
+  const modal = document.getElementById('refundModal');
+
+  if (e.target === modal) {
+    cerrarRefund();
+  }
+};
 // =====================
 // INIT
 // =====================
