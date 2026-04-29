@@ -344,10 +344,13 @@ data.forEach(p => {
     ` : ''}
 
     <!-- 🔥 BOTÓN REFUND -->
-    <button onclick="event.stopPropagation(); abrirRefund(${p.woo_order_id}, ${p.total})"
-            style="background:#dc3545;color:white;padding:8px;border:none;border-radius:6px;margin-top:10px;">
-      💸 Refund
-    </button>
+    <div style="display:flex; justify-content:center; margin-top:15px;">
+  <button 
+    onclick="event.stopPropagation(); abrirRefund(${p.woo_order_id}, ${p.total})"
+    style="background:#dc3545;color:white;padding:10px 16px;border:none;border-radius:8px;cursor:pointer;">
+    💸 Refund
+  </button>
+</div>
 
   </div>
 `;
