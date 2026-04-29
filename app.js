@@ -991,15 +991,15 @@ let currentOrderId = null;
 
 window.abrirRefund = function(orderId, total) {
 
+  console.log("CLICK REFUND");
+
   window.currentOrderId = orderId;
   window.currentOrderTotal = total;
 
-  document.getElementById('refundStep1').style.display = 'block';
-  document.getElementById('refundStepTotal').style.display = 'none';
-  document.getElementById('refundStepParcial').style.display = 'none';
+  const modal = document.getElementById('refundModal');
 
-  document.getElementById('refundModal').classList.add('active');
-}
+  modal.classList.add('active');
+};
 
 function seleccionarTotal() {
   document.getElementById('refundStep1').style.display = 'none';
