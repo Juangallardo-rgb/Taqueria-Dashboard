@@ -343,14 +343,21 @@ data.forEach(p => {
       </a>
     ` : ''}
 
-    <!-- 🔥 BOTÓN REFUND -->
-    <div style="display:flex; justify-content:center; margin-top:15px;">
-  <button 
-    onclick="event.stopPropagation(); abrirRefund(${p.woo_order_id}, ${p.total})"
-    style="background:#dc3545;color:white;padding:10px 16px;border:none;border-radius:8px;cursor:pointer;">
-    💸 Refund
-  </button>
-</div>
+   ${p.refunded ? `
+  <div style="display:flex; justify-content:center; margin-top:15px;">
+    <div style="background:#28a745;color:white;padding:10px 14px;border-radius:8px;font-weight:bold;">
+      ✅ Reembolsado ($${p.refund_amount || p.total})
+    </div>
+  </div>
+` : `
+  <div style="display:flex; justify-content:center; margin-top:15px;">
+    <button 
+      onclick="event.stopPropagation(); abrirRefund(${p.woo_order_id}, ${p.total})"
+      style="background:#dc3545;color:white;padding:10px 16px;border:none;border-radius:8px;cursor:pointer;">
+      💸 Refund
+    </button>
+  </div>
+`}
 
   </div>
 `;
@@ -980,8 +987,17 @@ async function completarPedido(id) {
 let currentOrderId = null;
 
 function abrirRefund(orderId, total) {
+
   currentOrderId = orderId;
-  document.getElementById('refundAmount').value = total;
+
+  const esTotal = confirm("¿Reembolso TOTAL?\nAceptar = Total\nCancelar = Parcial");
+
+  if (esTotal) {
+    document.getElementById('refundAmount').value = total;
+  } else {
+    document.getElementById('refundAmount').value = '';
+  }
+
   document.getElementById('refundModal').style.display = 'block';
 }
 
@@ -999,27 +1015,34 @@ async function confirmarRefund() {
   }
 
   const ok = confirm(`⚠️ ¿Seguro quieres reembolsar $${amount}?`);
-
   if (!ok) return;
 
-  const res = await fetch('/refund', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      orderId: currentOrderId,
-      amount
-    })
-  });
+  try {
 
-  const data = await res.json();
+    const res = await fetch('/refund', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        woo_order_id: currentOrderId, // 🔥 CORREGIDO
+        amount
+      })
+    });
 
-  if (data.success) {
-    alert("✅ Reembolso realizado");
-    cerrarRefund();
-  } else {
-    alert("❌ Error en reembolso");
+    const data = await res.json();
+
+    if (data.success) {
+      alert("✅ Reembolso realizado");
+      cerrarRefund();
+      verPedidos(true); // 🔥 refresca UI
+    } else {
+      alert(data.message || "❌ Error en reembolso");
+    }
+
+  } catch (e) {
+    console.error(e);
+    alert("Error de conexión");
   }
 }
 // =====================

@@ -298,35 +298,38 @@ app.get('/orders-complete', async (req, res) => {
     const restaurante_id = req.session?.restaurante_id || 1;
 
     const result = await pool.query(`
-      SELECT 
-        p.id,
-        p.total,
-        p.estado,
-        p.customer_name,
-        p.items,
-        p.created_at,
-        d.driver_name,
+  SELECT 
+    p.id,
+    p.total,
+    p.estado,
+    p.customer_name,
+    p.items,
+    p.created_at,
 
-        -- 🔥 DETECCIÓN PICKUP / DELIVERY (NO TOCAR)
-        CASE 
-          WHEN d.order_number IS NULL THEN 'pickup'
-          ELSE 'delivery'
-        END AS estado_envio,
+    -- 🔥 AGREGAR ESTO
+    p.refunded,
+    p.refund_amount,
 
-        d.delivery_cost,
-        d.tracking_url,
-        d.picked_up_at,
-        d.delivered_at
+    d.driver_name,
 
-      FROM pedidos p
-      LEFT JOIN deliveries d
-        ON d.order_number = p.woo_order_id
+    CASE 
+      WHEN d.order_number IS NULL THEN 'pickup'
+      ELSE 'delivery'
+    END AS estado_envio,
 
-      -- 🔥 FILTRO MULTI-RESTAURANTE (CLAVE)
-      WHERE p.restaurante_id = $1
+    d.delivery_cost,
+    d.tracking_url,
+    d.picked_up_at,
+    d.delivered_at
 
-      ORDER BY p.created_at DESC
-    `, [restaurante_id]);
+  FROM pedidos p
+  LEFT JOIN deliveries d
+    ON d.order_number = p.woo_order_id
+
+  WHERE p.restaurante_id = $1
+
+  ORDER BY p.created_at DESC
+`, [restaurante_id]);
 
     res.json(result.rows);
 
@@ -745,6 +748,57 @@ app.post('/refund', async (req, res) => {
   } catch (error) {
     console.error(error.response?.data || error.message);
     res.json({ success: false });
+  }
+});
+
+app.post('/refund', async (req, res) => {
+  const { woo_order_id, amount } = req.body;
+
+  try {
+    // 🔥 1. VALIDAR SI YA FUE REEMBOLSADO
+    const pedido = await pool.query(
+      'SELECT refunded FROM pedidos WHERE woo_order_id = $1',
+      [woo_order_id]
+    );
+
+    if (!pedido.rows.length) {
+      return res.json({ success: false, message: "Pedido no encontrado" });
+    }
+
+    if (pedido.rows[0].refunded) {
+      return res.json({ success: false, message: "Ya fue reembolsado" });
+    }
+
+    // 🔥 2. HACER REFUND EN WOO
+    await axios.post(
+      `${WOO_URL}/wp-json/wc/v3/orders/${woo_order_id}/refunds`,
+      {
+        amount: amount.toString()
+      },
+      {
+        auth: {
+          username: CONSUMER_KEY,
+          password: CONSUMER_SECRET
+        }
+      }
+    );
+
+    // 🔥 3. GUARDAR EN DB
+    await pool.query(
+      `UPDATE pedidos
+       SET refunded = true,
+           refund_amount = $1
+       WHERE woo_order_id = $2`,
+      [amount, woo_order_id]
+    );
+
+    console.log("💸 REFUND OK:", woo_order_id);
+
+    res.json({ success: true });
+
+  } catch (error) {
+    console.error("❌ ERROR REFUND:", error.response?.data || error.message);
+    res.json({ success: false, message: "Error refund" });
   }
 });
 
