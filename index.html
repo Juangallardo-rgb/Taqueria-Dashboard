@@ -63,38 +63,6 @@
 
   </div>
 
-  <div id="refundModal" class="refund-overlay">
-
-  <div class="refund-box">
-
-    <h3 id="refundTitle">💸 Reembolso</h3>
-
-    <!-- PASO 1 -->
-    <div id="refundStep1">
-      <button class="btn-refund-confirm" onclick="seleccionarTotal()">Reembolso Total</button>
-      <button class="btn-refund-cancel" onclick="seleccionarParcial()">Reembolso Parcial</button>
-    </div>
-
-    <!-- PASO 2 TOTAL -->
-    <div id="refundStepTotal" style="display:none;">
-      <p>¿Seguro que deseas reembolsar el total?</p>
-      <button class="btn-refund-confirm" onclick="confirmarRefundTotal()">Confirmar</button>
-      <button class="btn-refund-cancel" onclick="cerrarRefund()">Cancelar</button>
-    </div>
-
-    <!-- PASO 2 PARCIAL -->
-    <div id="refundStepParcial" style="display:none;">
-      <input id="refundAmount" type="number" placeholder="Monto a reembolsar">
-
-      <div class="refund-buttons">
-        <button class="btn-refund-confirm" onclick="confirmarRefundParcial()">Confirmar</button>
-        <button class="btn-refund-cancel" onclick="cerrarRefund()">Cancelar</button>
-      </div>
-    </div>
-
-  </div>
-
-</div>
 
   <!-- MAIN -->
   <div class="main">
@@ -179,5 +147,37 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script defer src="app.js"></script>
 
+<div id="refundModal" class="refund-overlay">
+
+  <div class="refund-box">
+
+    <h3 id="refundTitle">💸 Reembolso</h3>
+
+    <!-- PASO 1 -->
+    <div id="refundStep1">
+      <button class="btn-refund-confirm" onclick="seleccionarTotal()">Reembolso Total</button>
+      <button class="btn-refund-cancel" onclick="seleccionarParcial()">Reembolso Parcial</button>
+    </div>
+
+    <!-- PASO 2 TOTAL -->
+    <div id="refundStepTotal" style="display:none;">
+      <p>¿Seguro que deseas reembolsar el total?</p>
+      <button class="btn-refund-confirm" onclick="confirmarRefundTotal()">Confirmar</button>
+      <button class="btn-refund-cancel" onclick="cerrarRefund()">Cancelar</button>
+    </div>
+
+    <!-- PASO 2 PARCIAL -->
+    <div id="refundStepParcial" style="display:none;">
+      <input id="refundAmount" type="number" placeholder="Monto a reembolsar">
+
+      <div class="refund-buttons">
+        <button class="btn-refund-confirm" onclick="confirmarRefundParcial()">Confirmar</button>
+        <button class="btn-refund-cancel" onclick="cerrarRefund()">Cancelar</button>
+      </div>
+    </div>
+
+  </div>
+
+</div>
 </body>
 </html>
