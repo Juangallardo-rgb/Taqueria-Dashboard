@@ -729,12 +729,53 @@ app.get('/admin/usuarios', async (req, res) => {
 
 app.post('/refund', async (req, res) => {
 
-  const { orderId, amount } = req.body;
+  const { woo_order_id, orderId, amount } = req.body;
+
+  // ✅ Acepta ambos nombres por seguridad
+  const finalOrderId = woo_order_id || orderId;
 
   try {
 
+    console.log("💸 REFUND REQUEST:", {
+      finalOrderId,
+      amount
+    });
+
+    if (!finalOrderId || !amount || Number(amount) <= 0) {
+      return res.json({
+        success: false,
+        message: "Datos inválidos para reembolso"
+      });
+    }
+
+    // ✅ 1. Verificar pedido en tu DB
+    const pedido = await pool.query(
+      `SELECT woo_order_id, refunded, refund_amount, total
+       FROM pedidos
+       WHERE woo_order_id = $1`,
+      [String(finalOrderId)]
+    );
+
+    if (!pedido.rows.length) {
+      return res.json({
+        success: false,
+        message: "Pedido no encontrado en la base de datos"
+      });
+    }
+
+    if (pedido.rows[0].refunded) {
+      return res.json({
+        success: false,
+        message: "Este pedido ya fue reembolsado"
+      });
+    }
+
+    // ✅ 2. Verificar orden en Woo
+    const orderUrl = `${WOO_URL}/wp-json/wc/v3/orders/${finalOrderId}`;
+    console.log("🔎 ORDER URL:", orderUrl);
+
     const wooRes = await axios.get(
-      `${WOO_URL}/wp-json/wc/v3/orders/${orderId}`,
+      orderUrl,
       {
         auth: {
           username: CONSUMER_KEY,
@@ -745,15 +786,23 @@ app.post('/refund', async (req, res) => {
 
     const order = wooRes.data;
 
-    if (!order.transaction_id) {
-      return res.json({ success: false });
+    if (!order) {
+      return res.json({
+        success: false,
+        message: "Orden no encontrada en WooCommerce"
+      });
     }
 
-    await axios.post(
-      `${WOO_URL}/wp-json/wc/v3/orders/${orderId}/refunds`,
+    // ✅ 3. Crear refund en Woo
+    const refundUrl = `${WOO_URL}/wp-json/wc/v3/orders/${finalOrderId}/refunds`;
+    console.log("🔗 REFUND URL:", refundUrl);
+
+    const refundRes = await axios.post(
+      refundUrl,
       {
-        amount: amount,
-        reason: "Refund desde dashboard"
+        amount: Number(amount).toFixed(2),
+        reason: "Reembolso desde dashboard",
+        api_refund: true
       },
       {
         auth: {
@@ -763,12 +812,41 @@ app.post('/refund', async (req, res) => {
       }
     );
 
-    res.json({ success: true });
+    console.log("✅ WOO REFUND OK:", refundRes.data);
+
+    // ✅ 4. Guardar refund en DB solo si Woo respondió OK
+    await pool.query(
+      `UPDATE pedidos
+       SET refunded = true,
+           refund_amount = $1
+       WHERE woo_order_id = $2`,
+      [
+        Number(amount).toFixed(2),
+        String(finalOrderId)
+      ]
+    );
+
+    res.json({
+      success: true,
+      refund: refundRes.data
+    });
 
   } catch (error) {
-    console.error(error.response?.data || error.message);
-    res.json({ success: false });
+
+    const wooError = error.response?.data || error.message;
+
+    console.error("❌ ERROR REFUND DETALLE:", wooError);
+
+    res.json({
+      success: false,
+      message:
+        wooError?.message ||
+        wooError?.data?.message ||
+        "Error en reembolso",
+      error: wooError
+    });
   }
+
 });
 
 app.post('/refund', async (req, res) => {
