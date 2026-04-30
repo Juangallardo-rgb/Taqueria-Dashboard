@@ -146,11 +146,7 @@ app.post('/webhook-order', async (req, res) => {
         order.status,
         order.id,
         `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
-        JSON.stringify(
-  order.line_items && order.line_items.length
-    ? order.line_items
-    : items
-)
+        JSON.stringify(items)
       ]
     );
 
@@ -261,11 +257,7 @@ app.post('/webhook-shipday', async (req, res) => {
               order.status,
               order.id,
               `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
-              JSON.stringify(
-  order.line_items && order.line_items.length
-    ? order.line_items
-    : items
-)
+              JSON.stringify(items)
             ]
           );
 
@@ -585,21 +577,17 @@ app.get('/force-order/:id', async (req, res) => {
     });
 
     // 🔥 4. GUARDAR SOLO UNA VEZ
-  // 🔥 4. GUARDAR SOLO UNA VEZ
-const itemsParaGuardar = order.line_items && order.line_items.length
-  ? order.line_items
-  : items;
-
-await pool.query(
+    await pool.query(
   `UPDATE pedidos 
    SET items = $1
    WHERE woo_order_id = $2
    AND (items IS NULL OR items::text != $1)`,
   [
-    JSON.stringify(itemsParaGuardar),
+    JSON.stringify(items),
     order.id
   ]
 );
+
 console.log("⚡ FORCE ORDER:", orderId);
 
     res.json({ success: true });
