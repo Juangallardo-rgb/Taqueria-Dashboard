@@ -802,6 +802,87 @@ app.post('/refund', async (req, res) => {
   }
 });
 
+app.get('/refund-data/:woo_order_id', async (req, res) => {
+  const wooOrderId = req.params.woo_order_id;
+
+  try {
+    const wooRes = await axios.get(
+      `${WOO_URL}/wp-json/wc/v3/orders/${wooOrderId}`,
+      {
+        auth: {
+          username: CONSUMER_KEY,
+          password: CONSUMER_SECRET
+        }
+      }
+    );
+
+    const order = wooRes.data;
+
+    if (!order || !order.line_items) {
+      return res.status(404).json({
+        success: false,
+        message: 'Orden no encontrada o sin productos'
+      });
+    }
+
+    const items = order.line_items.map(item => {
+      const quantity = Number(item.quantity || 1);
+
+      const lineTotal = Number(item.total || 0);
+      const lineTax = Number(item.total_tax || 0);
+
+      // Total real reembolsable por esa línea, incluyendo tax de ese producto
+      const refundTotal = lineTotal + lineTax;
+
+      // Precio real por unidad
+      const unitRefund = quantity > 0 ? refundTotal / quantity : refundTotal;
+
+      const extras = (item.meta_data || [])
+        .filter(m => {
+          const value = String(m.value || '');
+          return (
+            value &&
+            value !== '' &&
+            !value.includes('[object Object]') &&
+            !String(m.key || '').includes('_wapf')
+          );
+        })
+        .map(m => ({
+          key: m.display_key || m.key,
+          value: m.display_value || m.value
+        }));
+
+      return {
+        line_item_id: item.id,
+        product_id: item.product_id,
+        variation_id: item.variation_id,
+        name: item.name,
+        quantity: quantity,
+        total: lineTotal,
+        tax: lineTax,
+        refund_total: Number(refundTotal.toFixed(2)),
+        unit_refund: Number(unitRefund.toFixed(2)),
+        extras: extras
+      };
+    });
+
+    res.json({
+      success: true,
+      order_id: order.id,
+      order_total: Number(order.total || 0),
+      items
+    });
+
+  } catch (error) {
+    console.error('❌ ERROR REFUND DATA:', error.response?.data || error.message);
+
+    res.status(500).json({
+      success: false,
+      message: 'Error obteniendo productos para refund'
+    });
+  }
+});
+
 // 🚀 START
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);
