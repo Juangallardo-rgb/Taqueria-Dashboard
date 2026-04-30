@@ -846,7 +846,8 @@ body {
 }
 
 .refund-item-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 24px 1fr;
   gap: 10px;
   align-items: flex-start;
   padding: 10px;
@@ -862,11 +863,15 @@ body {
 }
 
 .refund-item-check {
-  margin-top: 4px;
+  width: 16px;
+  height: 16px;
+  margin: 3px 0 0 0;
+  justify-self: center;
+  flex: none;
 }
 
 .refund-item-info {
-  flex: 1;
+  width: 100%;
 }
 
 .refund-item-title {
@@ -877,7 +882,8 @@ body {
 .refund-item-extra {
   font-size: 13px;
   color: #555;
-  margin-left: 4px;
+  margin-left: 0;
+  line-height: 1.35;
 }
 
 .refund-item-price {
