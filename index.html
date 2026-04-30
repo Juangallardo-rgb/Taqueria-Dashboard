@@ -167,14 +167,31 @@
     </div>
 
     <!-- PASO 2 PARCIAL -->
-    <div id="refundStepParcial" style="display:none;">
-      <input id="refundAmount" type="number" placeholder="Monto a reembolsar">
+    <div id="refundStepParcial" style="display:none; text-align:left;">
 
-      <div class="refund-buttons">
-        <button class="btn-refund-confirm" onclick="confirmarRefundParcial()">Confirmar</button>
-        <button class="btn-refund-cancel" onclick="cerrarRefund()">Cancelar</button>
-      </div>
-    </div>
+  <p style="text-align:center; font-weight:bold; margin-bottom:10px;">
+    Selecciona productos a reembolsar
+  </p>
+
+  <div id="refundItemsContainer"></div>
+
+  <hr style="margin:12px 0;">
+
+  <div style="text-align:center; font-weight:bold; margin-bottom:12px;">
+    Total a reembolsar: $<span id="refundTotal">0.00</span>
+  </div>
+
+  <div class="refund-buttons">
+    <button class="btn-refund-confirm" onclick="confirmarRefundParcial()">
+      Confirmar
+    </button>
+
+    <button class="btn-refund-cancel" onclick="cerrarRefund()">
+      Cancelar
+    </button>
+  </div>
+
+</div>
 
   </div>
 

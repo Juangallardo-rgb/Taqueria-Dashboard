@@ -1006,9 +1006,90 @@ function seleccionarTotal() {
   document.getElementById('refundStepTotal').style.display = 'block';
 }
 
-function seleccionarParcial() {
+async function seleccionarParcial() {
+
   document.getElementById('refundStep1').style.display = 'none';
+  document.getElementById('refundStepTotal').style.display = 'none';
   document.getElementById('refundStepParcial').style.display = 'block';
+
+  const container = document.getElementById('refundItemsContainer');
+  const totalBox = document.getElementById('refundTotal');
+
+  container.innerHTML = '<p style="text-align:center;">Cargando productos...</p>';
+  totalBox.innerText = '0.00';
+  window.currentRefundTotal = 0;
+
+  try {
+    const res = await fetch(`/refund-data/${window.currentOrderId}`);
+    const data = await res.json();
+
+    if (!data.success) {
+      container.innerHTML = `<p style="color:red; text-align:center;">${data.message || 'No se pudieron cargar productos'}</p>`;
+      return;
+    }
+
+    window.currentRefundItems = data.items || [];
+
+    if (!window.currentRefundItems.length) {
+      container.innerHTML = '<p style="text-align:center;">No hay productos disponibles para reembolso parcial</p>';
+      return;
+    }
+
+    container.innerHTML = '';
+
+    window.currentRefundItems.forEach((item, index) => {
+
+      const extrasHTML = (item.extras || []).map(extra => {
+        return `<div class="refund-item-extra">• ${extra.key}: ${extra.value}</div>`;
+      }).join('');
+
+      container.innerHTML += `
+        <label class="refund-item-row">
+          <input 
+            type="checkbox" 
+            class="refund-item-check"
+            data-amount="${item.refund_total}"
+            onchange="actualizarRefundTotal()"
+          >
+
+          <div class="refund-item-info">
+            <div class="refund-item-title">
+              ${item.name} x${item.quantity}
+            </div>
+
+            ${extrasHTML}
+
+            <div class="refund-item-price">
+              Reembolso: $${Number(item.refund_total).toFixed(2)}
+            </div>
+          </div>
+        </label>
+      `;
+    });
+
+    actualizarRefundTotal();
+
+  } catch (error) {
+    console.error("ERROR CARGANDO REFUND DATA:", error);
+    container.innerHTML = '<p style="color:red; text-align:center;">Error cargando productos</p>';
+  }
+}
+
+function actualizarRefundTotal() {
+  const checks = document.querySelectorAll('.refund-item-check:checked');
+
+  let total = 0;
+
+  checks.forEach(check => {
+    total += Number(check.dataset.amount || 0);
+  });
+
+  window.currentRefundTotal = Number(total.toFixed(2));
+
+  const totalBox = document.getElementById('refundTotal');
+  if (totalBox) {
+    totalBox.innerText = window.currentRefundTotal.toFixed(2);
+  }
 }
 
 window.cerrarRefund = function() {
@@ -1055,14 +1136,15 @@ async function confirmarRefundTotal() {
 }
 async function confirmarRefundParcial() {
 
-  const amount = document.getElementById('refundAmount').value;
-
-  if (!amount || isNaN(amount)) {
-    alert("Monto inválido");
+  if (!window.currentRefundTotal || window.currentRefundTotal <= 0) {
+    alert("Selecciona al menos un producto");
     return;
   }
 
-  await hacerRefund(window.currentOrderId, amount);
+  const ok = confirm(`¿Seguro que deseas reembolsar $${window.currentRefundTotal.toFixed(2)}?`);
+  if (!ok) return;
+
+  await hacerRefund(window.currentOrderId, window.currentRefundTotal);
 }
 window.onclick = function(e) {
   const modal = document.getElementById('refundModal');
