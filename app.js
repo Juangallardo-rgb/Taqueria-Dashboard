@@ -1120,8 +1120,12 @@ async function hacerRefund(woo_order_id, amount) {
 
     if (data.success) {
       alert("✅ Reembolso realizado");
+
       cerrarRefund();
-      verPedidos(true);
+
+      // 🔥 Esto actualiza la tarjeta y oculta el botón
+      await verPedidos(true);
+
     } else {
       alert(data.message || "❌ Error en reembolso");
     }
