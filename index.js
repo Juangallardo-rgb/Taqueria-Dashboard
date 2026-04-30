@@ -132,23 +132,30 @@ app.post('/webhook-order', async (req, res) => {
     });
 
     await pool.query(
-      `INSERT INTO pedidos (restaurante_id, total, estado, woo_order_id, customer_name, items)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (woo_order_id)
-       DO UPDATE SET
-         estado = EXCLUDED.estado,
-         total = EXCLUDED.total,
-         customer_name = EXCLUDED.customer_name,
-         items = EXCLUDED.items`,
-      [
-        1,
-        order.total,
-        order.status,
-        order.id,
-        `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
-        JSON.stringify(items)
-      ]
-    );
+  `INSERT INTO pedidos 
+   (restaurante_id, total, estado, woo_order_id, customer_name, items, refund_items)
+   VALUES ($1, $2, $3, $4, $5, $6, $7)
+   ON CONFLICT (woo_order_id)
+   DO UPDATE SET
+     estado = EXCLUDED.estado,
+     total = EXCLUDED.total,
+     customer_name = EXCLUDED.customer_name,
+     items = EXCLUDED.items,
+     refund_items = EXCLUDED.refund_items`,
+  [
+    1,
+    order.total,
+    order.status,
+    order.id,
+    `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
+
+    // ✅ NO SE TOCA: esto mantiene tu dashboard como está
+    JSON.stringify(items),
+
+    // ✅ NUEVO: solo para refund parcial con precios reales
+    JSON.stringify(order.line_items || [])
+  ]
+);
 
     console.log("✅ WOO GUARDADO CON ITEMS");
 
@@ -241,25 +248,31 @@ app.post('/webhook-shipday', async (req, res) => {
           });
 
           // 🔥 3. INSERTAR PEDIDO COMPLETO (UNA SOLA VEZ)
-          await pool.query(
-            `INSERT INTO pedidos 
-            (restaurante_id, total, estado, woo_order_id, customer_name, items, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, NOW())
-            ON CONFLICT (woo_order_id)
-            DO UPDATE SET
-              estado = EXCLUDED.estado,
-              total = EXCLUDED.total,
-              customer_name = EXCLUDED.customer_name,
-              items = EXCLUDED.items`,
-            [
-              1,
-              order.total,
-              order.status,
-              order.id,
-              `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
-              JSON.stringify(items)
-            ]
-          );
+await pool.query(
+  `INSERT INTO pedidos 
+  (restaurante_id, total, estado, woo_order_id, customer_name, items, refund_items, created_at)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+  ON CONFLICT (woo_order_id)
+  DO UPDATE SET
+    estado = EXCLUDED.estado,
+    total = EXCLUDED.total,
+    customer_name = EXCLUDED.customer_name,
+    items = EXCLUDED.items,
+    refund_items = EXCLUDED.refund_items`,
+  [
+    1,
+    order.total,
+    order.status,
+    order.id,
+    `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
+
+    // ✅ NO SE TOCA: mantiene el detalle visual actual
+    JSON.stringify(items),
+
+    // ✅ NUEVO: solo para refund parcial con precios reales
+    JSON.stringify(order.line_items || [])
+  ]
+);
 
           console.log("🔥 PEDIDO COMPLETO GUARDADO DESDE SHIPDAY");
 
@@ -579,11 +592,17 @@ app.get('/force-order/:id', async (req, res) => {
     // 🔥 4. GUARDAR SOLO UNA VEZ
     await pool.query(
   `UPDATE pedidos 
-   SET items = $1
-   WHERE woo_order_id = $2
-   AND (items IS NULL OR items::text != $1)`,
+   SET 
+     items = $1,
+     refund_items = $2
+   WHERE woo_order_id = $3`,
   [
+    // ✅ visual actual
     JSON.stringify(items),
+
+    // ✅ datos completos para refund parcial
+    JSON.stringify(order.line_items || []),
+
     order.id
   ]
 );
@@ -806,48 +825,34 @@ app.get('/refund-data/:woo_order_id', async (req, res) => {
   const wooOrderId = req.params.woo_order_id;
 
   try {
-    let order = null;
+    const result = await pool.query(
+      `SELECT woo_order_id, total, refund_items
+       FROM pedidos
+       WHERE woo_order_id = $1`,
+      [wooOrderId]
+    );
 
-    // 1. Intentar traer la orden directo por ID
-    try {
-      const directRes = await axios.get(
-        `${WOO_URL}/wp-json/wc/v3/orders/${wooOrderId}`,
-        {
-          auth: {
-            username: CONSUMER_KEY,
-            password: CONSUMER_SECRET
-          }
-        }
-      );
-
-      order = directRes.data;
-      console.log("✅ Orden encontrada directa:", wooOrderId);
-
-    } catch (directError) {
-      console.log("⚠️ No se encontró directa, intentando search:", wooOrderId);
-
-      // 2. Si falla, buscar por search
-      const searchRes = await axios.get(
-        `${WOO_URL}/wp-json/wc/v3/orders?search=${wooOrderId}`,
-        {
-          auth: {
-            username: CONSUMER_KEY,
-            password: CONSUMER_SECRET
-          }
-        }
-      );
-
-      order = searchRes.data && searchRes.data.length ? searchRes.data[0] : null;
-    }
-
-    if (!order || !order.line_items) {
+    if (!result.rows.length) {
       return res.status(404).json({
         success: false,
-        message: 'Orden no encontrada o sin productos'
+        message: 'Pedido no encontrado en base de datos'
       });
     }
 
-    const items = order.line_items.map(item => {
+    const pedido = result.rows[0];
+
+    const rawItems = typeof pedido.refund_items === 'string'
+      ? JSON.parse(pedido.refund_items)
+      : pedido.refund_items;
+
+    if (!rawItems || !rawItems.length) {
+      return res.json({
+        success: false,
+        message: 'Este pedido todavía no tiene datos completos para refund parcial'
+      });
+    }
+
+    const items = rawItems.map(item => {
       const quantity = Number(item.quantity || 1);
 
       const lineTotal = Number(item.total || 0);
@@ -859,11 +864,11 @@ app.get('/refund-data/:woo_order_id', async (req, res) => {
       const extras = (item.meta_data || [])
         .filter(m => {
           const key = String(m.key || '');
-          const value = m.value;
+          const value = String(m.value || m.display_value || '');
 
           if (!value) return false;
           if (key.includes('_wapf')) return false;
-          if (String(value).includes('[object Object]')) return false;
+          if (value.includes('[object Object]')) return false;
 
           return true;
         })
@@ -874,33 +879,30 @@ app.get('/refund-data/:woo_order_id', async (req, res) => {
 
       return {
         line_item_id: item.id,
-        product_id: item.product_id,
-        variation_id: item.variation_id,
         name: item.name,
-        quantity: quantity,
+        quantity,
         total: Number(lineTotal.toFixed(2)),
         tax: Number(lineTax.toFixed(2)),
         refund_total: Number(refundTotal.toFixed(2)),
         unit_refund: Number(unitRefund.toFixed(2)),
-        extras: extras
+        extras
       };
     });
 
     res.json({
       success: true,
-      order_id: order.id,
-      order_number: order.number,
-      order_total: Number(order.total || 0),
+      woo_order_id: pedido.woo_order_id,
+      order_total: Number(pedido.total || 0),
       items
     });
 
   } catch (error) {
-    console.error("❌ ERROR REFUND DATA DETALLE:", error.response?.data || error.message);
+    console.error('❌ ERROR REFUND DATA LOCAL:', error.message);
 
     res.status(500).json({
       success: false,
-      message: "Error obteniendo productos para refund",
-      error: error.response?.data || error.message
+      message: 'Error obteniendo productos para refund parcial',
+      error: error.message
     });
   }
 });
