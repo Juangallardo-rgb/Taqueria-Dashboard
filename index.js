@@ -806,17 +806,39 @@ app.get('/refund-data/:woo_order_id', async (req, res) => {
   const wooOrderId = req.params.woo_order_id;
 
   try {
-    const wooRes = await axios.get(
-      `${WOO_URL}/wp-json/wc/v3/orders/${wooOrderId}`,
-      {
-        auth: {
-          username: CONSUMER_KEY,
-          password: CONSUMER_SECRET
-        }
-      }
-    );
+    let order = null;
 
-    const order = wooRes.data;
+    // 1. Intentar traer la orden directo por ID
+    try {
+      const directRes = await axios.get(
+        `${WOO_URL}/wp-json/wc/v3/orders/${wooOrderId}`,
+        {
+          auth: {
+            username: CONSUMER_KEY,
+            password: CONSUMER_SECRET
+          }
+        }
+      );
+
+      order = directRes.data;
+      console.log("✅ Orden encontrada directa:", wooOrderId);
+
+    } catch (directError) {
+      console.log("⚠️ No se encontró directa, intentando search:", wooOrderId);
+
+      // 2. Si falla, buscar por search
+      const searchRes = await axios.get(
+        `${WOO_URL}/wp-json/wc/v3/orders?search=${wooOrderId}`,
+        {
+          auth: {
+            username: CONSUMER_KEY,
+            password: CONSUMER_SECRET
+          }
+        }
+      );
+
+      order = searchRes.data && searchRes.data.length ? searchRes.data[0] : null;
+    }
 
     if (!order || !order.line_items) {
       return res.status(404).json({
@@ -831,21 +853,19 @@ app.get('/refund-data/:woo_order_id', async (req, res) => {
       const lineTotal = Number(item.total || 0);
       const lineTax = Number(item.total_tax || 0);
 
-      // Total real reembolsable por esa línea, incluyendo tax de ese producto
       const refundTotal = lineTotal + lineTax;
-
-      // Precio real por unidad
       const unitRefund = quantity > 0 ? refundTotal / quantity : refundTotal;
 
       const extras = (item.meta_data || [])
         .filter(m => {
-          const value = String(m.value || '');
-          return (
-            value &&
-            value !== '' &&
-            !value.includes('[object Object]') &&
-            !String(m.key || '').includes('_wapf')
-          );
+          const key = String(m.key || '');
+          const value = m.value;
+
+          if (!value) return false;
+          if (key.includes('_wapf')) return false;
+          if (String(value).includes('[object Object]')) return false;
+
+          return true;
         })
         .map(m => ({
           key: m.display_key || m.key,
@@ -858,8 +878,8 @@ app.get('/refund-data/:woo_order_id', async (req, res) => {
         variation_id: item.variation_id,
         name: item.name,
         quantity: quantity,
-        total: lineTotal,
-        tax: lineTax,
+        total: Number(lineTotal.toFixed(2)),
+        tax: Number(lineTax.toFixed(2)),
         refund_total: Number(refundTotal.toFixed(2)),
         unit_refund: Number(unitRefund.toFixed(2)),
         extras: extras
@@ -869,16 +889,18 @@ app.get('/refund-data/:woo_order_id', async (req, res) => {
     res.json({
       success: true,
       order_id: order.id,
+      order_number: order.number,
       order_total: Number(order.total || 0),
       items
     });
 
   } catch (error) {
-    console.error('❌ ERROR REFUND DATA:', error.response?.data || error.message);
+    console.error("❌ ERROR REFUND DATA DETALLE:", error.response?.data || error.message);
 
     res.status(500).json({
       success: false,
-      message: 'Error obteniendo productos para refund'
+      message: "Error obteniendo productos para refund",
+      error: error.response?.data || error.message
     });
   }
 });
