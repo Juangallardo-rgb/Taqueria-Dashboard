@@ -311,38 +311,39 @@ app.get('/orders-complete', async (req, res) => {
     const restaurante_id = req.session?.restaurante_id || 1;
 
     const result = await pool.query(`
-  SELECT 
-    p.id,
-    p.total,
-    p.estado,
-    p.customer_name,
-    p.items,
-    p.created_at,
+      SELECT 
+        p.id,
+        p.woo_order_id,
+        p.total,
+        p.estado,
+        p.customer_name,
+        p.items,
+        p.created_at,
 
-    -- 🔥 AGREGAR ESTO
-    p.refunded,
-    p.refund_amount,
+        -- 🔥 REFUND
+        p.refunded,
+        p.refund_amount,
 
-    d.driver_name,
+        d.driver_name,
 
-    CASE 
-      WHEN d.order_number IS NULL THEN 'pickup'
-      ELSE 'delivery'
-    END AS estado_envio,
+        CASE 
+          WHEN d.order_number IS NULL THEN 'pickup'
+          ELSE 'delivery'
+        END AS estado_envio,
 
-    d.delivery_cost,
-    d.tracking_url,
-    d.picked_up_at,
-    d.delivered_at
+        d.delivery_cost,
+        d.tracking_url,
+        d.picked_up_at,
+        d.delivered_at
 
-  FROM pedidos p
-  LEFT JOIN deliveries d
-    ON d.order_number = p.woo_order_id
+      FROM pedidos p
+      LEFT JOIN deliveries d
+        ON d.order_number = p.woo_order_id
 
-  WHERE p.restaurante_id = $1
+      WHERE p.restaurante_id = $1
 
-  ORDER BY p.created_at DESC
-`, [restaurante_id]);
+      ORDER BY p.created_at DESC
+    `, [restaurante_id]);
 
     res.json(result.rows);
 
