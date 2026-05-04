@@ -133,13 +133,14 @@ app.post('/webhook-order', async (req, res) => {
 
     await pool.query(
   `INSERT INTO pedidos 
-   (restaurante_id, total, estado, woo_order_id, customer_name, items, refund_items)
-   VALUES ($1, $2, $3, $4, $5, $6, $7)
+   (restaurante_id, total, estado, woo_order_id, customer_name, customer_phone, items, refund_items)
+   VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
    ON CONFLICT (woo_order_id)
    DO UPDATE SET
      estado = EXCLUDED.estado,
      total = EXCLUDED.total,
      customer_name = EXCLUDED.customer_name,
+     customer_phone = EXCLUDED.customer_phone,
      items = EXCLUDED.items,
      refund_items = EXCLUDED.refund_items`,
   [
@@ -148,11 +149,8 @@ app.post('/webhook-order', async (req, res) => {
     order.status,
     order.id,
     `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
-
-    // ✅ NO SE TOCA: esto mantiene tu dashboard como está
+    order.billing?.phone || '',
     JSON.stringify(items),
-
-    // ✅ NUEVO: solo para refund parcial con precios reales
     JSON.stringify(order.line_items || [])
   ]
 );
@@ -250,13 +248,14 @@ app.post('/webhook-shipday', async (req, res) => {
           // 🔥 3. INSERTAR PEDIDO COMPLETO (UNA SOLA VEZ)
 await pool.query(
   `INSERT INTO pedidos 
-  (restaurante_id, total, estado, woo_order_id, customer_name, items, refund_items, created_at)
-  VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+  (restaurante_id, total, estado, woo_order_id, customer_name, customer_phone, items, refund_items, created_at)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
   ON CONFLICT (woo_order_id)
   DO UPDATE SET
     estado = EXCLUDED.estado,
     total = EXCLUDED.total,
     customer_name = EXCLUDED.customer_name,
+    customer_phone = EXCLUDED.customer_phone,
     items = EXCLUDED.items,
     refund_items = EXCLUDED.refund_items`,
   [
@@ -265,11 +264,8 @@ await pool.query(
     order.status,
     order.id,
     `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
-
-    // ✅ NO SE TOCA: mantiene el detalle visual actual
+    order.billing?.phone || '',
     JSON.stringify(items),
-
-    // ✅ NUEVO: solo para refund parcial con precios reales
     JSON.stringify(order.line_items || [])
   ]
 );
@@ -594,10 +590,14 @@ app.get('/force-order/:id', async (req, res) => {
     await pool.query(
   `UPDATE pedidos 
    SET 
-     items = $1,
-     refund_items = $2
-   WHERE woo_order_id = $3`,
+     customer_phone = $1,
+     items = $2,
+     refund_items = $3
+   WHERE woo_order_id = $4`,
   [
+    // ✅ teléfono del cliente desde Woo
+    order.billing?.phone || '',
+
     // ✅ visual actual
     JSON.stringify(items),
 
