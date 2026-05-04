@@ -313,13 +313,13 @@ app.get('/orders-complete', async (req, res) => {
         p.total,
         p.estado,
         p.customer_name,
+        p.customer_phone,
         p.items,
         p.created_at,
 
         -- 🔥 REFUND
         p.refunded,
         p.refund_amount,
-
         d.driver_name,
 
         CASE 

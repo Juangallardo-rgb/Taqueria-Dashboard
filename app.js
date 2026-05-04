@@ -322,6 +322,8 @@ data.forEach(p => {
     <p>🕒 ${new Date(p.created_at).toLocaleString()}</p>
 
     <p>👤 Cliente: ${p.customer_name || 'Cliente'}</p>
+    
+    ${p.customer_phone ? `<p>📞 Teléfono: ${p.customer_phone}</p>` : ''}
 
     <div>
       <strong>🍽 Detalle:</strong>
