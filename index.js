@@ -55,18 +55,37 @@ app.get('/dashboard', (req, res) => {
 // ===============================
 app.get('/woo-orders', async (req, res) => {
   try {
+    if (!WOO_URL || !CONSUMER_KEY || !CONSUMER_SECRET) {
+      console.error("❌ Faltan variables de WooCommerce:", {
+        WOO_URL: !!WOO_URL,
+        WOO_CONSUMER_KEY: !!CONSUMER_KEY,
+        WOO_CONSUMER_SECRET: !!CONSUMER_SECRET
+      });
+
+      return res.status(500).json({
+        message: "Faltan variables de entorno de WooCommerce"
+      });
+    }
+
+    const cleanWooUrl = WOO_URL.replace(/\/$/, '');
+
     const response = await axios.get(
-      `${WOO_URL}/wp-json/wc/v3/orders?per_page=20`,
+      `${cleanWooUrl}/wp-json/wc/v3/orders`,
       {
-        auth: {
-          username: CONSUMER_KEY,
-          password: CONSUMER_SECRET
-        }
+        params: {
+          per_page: 20,
+          consumer_key: CONSUMER_KEY,
+          consumer_secret: CONSUMER_SECRET
+        },
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Denix-Backend/1.0'
+        },
+        timeout: 20000
       }
     );
 
     const wooOrders = response.data.map(order => {
-
       const esPickup = order.shipping_lines?.some(
         l => l.method_id === 'local_pickup'
       );
@@ -75,16 +94,17 @@ app.get('/woo-orders', async (req, res) => {
         id: order.id,
         total: order.total,
         estado: order.status,
+
         customer_name: `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
-        direccion: order.shipping?.address_1 || '',
-        ciudad: order.shipping?.city || '',
+
+        direccion: order.shipping?.address_1 || order.billing?.address_1 || '',
+        ciudad: order.shipping?.city || order.billing?.city || '',
 
         estado_envio: esPickup ? 'pickup' : 'delivery',
 
         created_at: order.date_created,
 
         items: (order.line_items || []).map(item => {
-
           const extras = (item.meta_data || [])
             .filter(m => m.value && m.value !== '')
             .map(m => `${m.key}: ${m.value}`)
@@ -101,8 +121,15 @@ app.get('/woo-orders', async (req, res) => {
     res.json(wooOrders);
 
   } catch (error) {
-    console.error("❌ ERROR WOO:", error.response?.data || error.message);
-    res.status(500).send('Error WooCommerce');
+    console.error("❌ ERROR WOO STATUS:", error.response?.status);
+    console.error("❌ ERROR WOO DATA:", error.response?.data || error.message);
+
+    res.status(500).json({
+      message: "Error WooCommerce",
+      status: error.response?.status || null,
+      error: error.message,
+      data: error.response?.data || null
+    });
   }
 });
 
