@@ -66,20 +66,19 @@ app.get('/woo-orders', async (req, res) => {
     const cleanWooUrl = WOO_URL.replace(/\/$/, '');
 
     const response = await axios.get(
-      `${cleanWooUrl}/wp-json/wc/v3/orders`,
-      {
-        params: {
-          per_page: 20,
-          consumer_key: CONSUMER_KEY,
-          consumer_secret: CONSUMER_SECRET
-        },
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Denix-Backend/1.0'
-        },
-        timeout: 20000
-      }
-    );
+  `${cleanWooUrl}/wp-json/wc/v3/orders?per_page=20`,
+  {
+    auth: {
+      username: CONSUMER_KEY,
+      password: CONSUMER_SECRET
+    },
+    headers: {
+      'Accept': 'application/json',
+      'User-Agent': 'Taqueria-Dashboard/1.0'
+    },
+    timeout: 20000
+  }
+);
 
     const wooOrders = response.data.map(order => {
       const esPickup = order.shipping_lines?.some(
