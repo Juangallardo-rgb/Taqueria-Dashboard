@@ -17,10 +17,9 @@ app.use(express.urlencoded({ extended: true }));
 
 const PORT = process.env.PORT || 4000;
 // 🔐 CLAVES (modo desarrollo)
-const WOO_URL = process.env.WOO_URL;
-const CONSUMER_KEY = process.env.WOO_CONSUMER_KEY;
-const CONSUMER_SECRET = process.env.WOO_CONSUMER_SECRET;
-
+const WOO_URL = process.env.WOO_URL?.trim();
+const CONSUMER_KEY = process.env.WOO_CONSUMER_KEY?.trim();
+const CONSUMER_SECRET = process.env.WOO_CONSUMER_SECRET?.trim();
 // 🧠 MEMORIA
 let wooOrders = [];
 let shipdayOrders = [];
