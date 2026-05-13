@@ -52,58 +52,53 @@ app.get('/dashboard', (req, res) => {
 // ===============================
 // 🔥 GET WOO ORDERS (OPTIMIZADO)
 // ===============================
-app.get('/woo-orders', async (req, res) => {
-  try {
-    const response = await axios.get(
-      `${WOO_URL}/wp-json/wc/v3/orders?per_page=20`,
-      {
-        auth: {
-          username: CONSUMER_KEY,
-          password: CONSUMER_SECRET
-        }
-      }
-    );
-
-    const wooOrders = response.data.map(order => {
-
-      const esPickup = order.shipping_lines?.some(
-        l => l.method_id === 'local_pickup'
-      );
-
-      return {
-        id: order.id,
-        total: order.total,
-        estado: order.status,
-        customer_name: `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
-        direccion: order.shipping?.address_1 || '',
-        ciudad: order.shipping?.city || '',
-
-        estado_envio: esPickup ? 'pickup' : 'delivery',
-
-        created_at: order.date_created,
-
-        items: (order.line_items || []).map(item => {
-
-          const extras = (item.meta_data || [])
-            .filter(m => m.value && m.value !== '')
-            .map(m => `${m.key}: ${m.value}`)
-            .join(', ');
-
-          return {
-            nombre: `${item.name}${extras ? ` (${extras})` : ''}`,
-            cantidad: item.quantity
-          };
-        })
-      };
-    });
-
-    res.json(wooOrders);
-
-  } catch (error) {
-    console.error("❌ ERROR WOO:", error.response?.data || error.message);
+app.get('/woo-orders', async (req, res) => { 
+  try { 
+    const response = await axios.get( 
+      ${WOO_URL}/wp-json/wc/v3/orders?per_page=20, 
+      { 
+        auth: { 
+          username: CONSUMER_KEY, 
+          password: CONSUMER_SECRET 
+        } 
+      } 
+    ); 
+    const wooOrders = response.data.map(order => { 
+      const esPickup = order.shipping_lines?.some( 
+        l => l.method_id === 'local_pickup' 
+      ); 
+      
+      return { 
+        id: order.id, 
+        total: order.total, 
+        estado: order.status, 
+        customer_name: ${order.billing?.first_name || ''} 
+        ${order.billing?.last_name || ''}.trim() || 'Cliente', 
+        direccion: order.shipping?.address_1 || '', 
+        ciudad: order.shipping?.city || '', 
+        estado_envio: esPickup ? 'pickup' : 'delivery', 
+        created_at: order.date_created, 
+        items: (order.line_items || []).map(item => { 
+          const extras = (item.meta_data || []) 
+          .filter(m => m.value && m.value !== '') 
+          .map(m => ${m.key}: ${m.value}) 
+          .join(', '); 
+          
+        return { 
+          nombre: ${item.name}${extras ? (${extras}) : ''}, 
+          cantidad: item.quantity 
+        }; 
+      }) 
+    }; 
+  }); 
+  res.json(wooOrders); 
+} catch (error) { 
+  console.error("❌ ERROR WOO:", error.response?.data || 
+    error.message); 
     res.status(500).send('Error WooCommerce');
-  }
-});
+   }
+  
+  });
 
 // ===============================
 // 🔥 WEBHOOK WOO (CORREGIDO)
