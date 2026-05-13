@@ -999,6 +999,7 @@ app.get('/test-db', async (req, res) => {
     console.error(error);
     res.status(500).send('Error conexión DB');
   }
+  
 }); 
 app.use(express.static(__dirname));
 
