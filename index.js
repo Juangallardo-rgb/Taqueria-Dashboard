@@ -100,23 +100,10 @@ app.get('/woo-orders', async (req, res) => {
     res.json(wooOrders);
 
   } catch (error) {
-  console.error("❌ ERROR WOO STATUS:", error.response?.status);
-  console.error("❌ ERROR WOO MESSAGE:", error.message);
-
-  const data = error.response?.data;
-
-  if (typeof data === 'string') {
-    console.error("❌ ERROR WOO TEXT:", data.slice(0, 300));
-  } else {
-    console.error("❌ ERROR WOO DATA:", data);
+    console.error("❌ ERROR WOO:", error.response?.data || error.message);
+    res.status(500).send('Error WooCommerce');
   }
-
-  res.status(500).json({
-    message: "Error WooCommerce",
-    status: error.response?.status || null,
-    error: error.message,
-    bot_verification: typeof data === 'string' && data.includes('Bot Verification')
-  });
+});
 
 
 // ===============================
