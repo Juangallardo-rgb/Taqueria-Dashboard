@@ -1013,6 +1013,17 @@ app.get('/refund-data/:woo_order_id', async (req, res) => {
   }
 });
 
+app.get('/debug-env', (req, res) => {
+  res.json({
+    WOO_URL: process.env.WOO_URL || null,
+    WOO_CONSUMER_KEY_EXISTS: !!process.env.WOO_CONSUMER_KEY,
+    WOO_CONSUMER_SECRET_EXISTS: !!process.env.WOO_CONSUMER_SECRET,
+    DATABASE_URL_EXISTS: !!process.env.DATABASE_URL
+  });
+});
+
+
+
 // 🚀 START
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);
