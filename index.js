@@ -17,9 +17,9 @@ app.use(express.urlencoded({ extended: true }));
 
 const PORT = process.env.PORT || 4000;
 // 🔐 CLAVES (modo desarrollo)
-const WOO_URL = 'https://taquerialabonita.com';
-const CONSUMER_KEY = 'ck_09ccb2842a83e1b4d089505baecb6c627a8cab1c';
-const CONSUMER_SECRET = 'cs_f0a533f8a25ec307a44126e421e2088b0b27f57a';
+const WOO_URL = process.env.WOO_URL;
+const CONSUMER_KEY = process.env.WOO_CONSUMER_KEY;
+const CONSUMER_SECRET = process.env.WOO_CONSUMER_SECRET;
 
 // 🧠 MEMORIA
 let wooOrders = [];
