@@ -56,14 +56,11 @@ app.get('/dashboard', (req, res) => {
 app.get('/woo-orders', async (req, res) => {
   try {
     if (!WOO_URL || !CONSUMER_KEY || !CONSUMER_SECRET) {
-      console.error("❌ Faltan variables de WooCommerce:", {
+      return res.status(500).json({
+        message: "Faltan variables WooCommerce",
         WOO_URL: !!WOO_URL,
         WOO_CONSUMER_KEY: !!CONSUMER_KEY,
         WOO_CONSUMER_SECRET: !!CONSUMER_SECRET
-      });
-
-      return res.status(500).json({
-        message: "Faltan variables de entorno de WooCommerce"
       });
     }
 
