@@ -17,9 +17,9 @@ app.use(express.urlencoded({ extended: true }));
 
 const PORT = process.env.PORT || 4000;
 // 🔐 CLAVES (modo desarrollo)
-const WOO_URL = process.env.WOO_URL?.trim();
-const CONSUMER_KEY = process.env.WOO_CONSUMER_KEY?.trim();
-const CONSUMER_SECRET = process.env.WOO_CONSUMER_SECRET?.trim();
+const WOO_URL = 'https://taquerialabonita.com';
+const CONSUMER_KEY = 'ck_09ccb2842a83e1b4d089505baecb6c627a8cab1c';
+const CONSUMER_SECRET = 'cs_f0a533f8a25ec307a44126e421e2088b0b27f57a';
 // 🧠 MEMORIA
 let wooOrders = [];
 let shipdayOrders = [];
@@ -54,33 +54,18 @@ app.get('/dashboard', (req, res) => {
 // ===============================
 app.get('/woo-orders', async (req, res) => {
   try {
-    if (!WOO_URL || !CONSUMER_KEY || !CONSUMER_SECRET) {
-      return res.status(500).json({
-        message: "Faltan variables WooCommerce",
-        WOO_URL: !!WOO_URL,
-        WOO_CONSUMER_KEY: !!CONSUMER_KEY,
-        WOO_CONSUMER_SECRET: !!CONSUMER_SECRET
-      });
-    }
-
-    const cleanWooUrl = WOO_URL.replace(/\/$/, '');
-
     const response = await axios.get(
-  `${cleanWooUrl}/wp-json/wc/v3/orders?per_page=20`,
-  {
-    auth: {
-      username: CONSUMER_KEY,
-      password: CONSUMER_SECRET
-    },
-    headers: {
-      'Accept': 'application/json',
-      'User-Agent': 'Taqueria-Dashboard/1.0'
-    },
-    timeout: 20000
-  }
-);
+      `${WOO_URL}/wp-json/wc/v3/orders?per_page=20`,
+      {
+        auth: {
+          username: CONSUMER_KEY,
+          password: CONSUMER_SECRET
+        }
+      }
+    );
 
     const wooOrders = response.data.map(order => {
+
       const esPickup = order.shipping_lines?.some(
         l => l.method_id === 'local_pickup'
       );
@@ -89,17 +74,16 @@ app.get('/woo-orders', async (req, res) => {
         id: order.id,
         total: order.total,
         estado: order.status,
-
         customer_name: `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
-
-        direccion: order.shipping?.address_1 || order.billing?.address_1 || '',
-        ciudad: order.shipping?.city || order.billing?.city || '',
+        direccion: order.shipping?.address_1 || '',
+        ciudad: order.shipping?.city || '',
 
         estado_envio: esPickup ? 'pickup' : 'delivery',
 
         created_at: order.date_created,
 
         items: (order.line_items || []).map(item => {
+
           const extras = (item.meta_data || [])
             .filter(m => m.value && m.value !== '')
             .map(m => `${m.key}: ${m.value}`)
@@ -116,15 +100,8 @@ app.get('/woo-orders', async (req, res) => {
     res.json(wooOrders);
 
   } catch (error) {
-    console.error("❌ ERROR WOO STATUS:", error.response?.status);
-    console.error("❌ ERROR WOO DATA:", error.response?.data || error.message);
-
-    res.status(500).json({
-      message: "Error WooCommerce",
-      status: error.response?.status || null,
-      error: error.message,
-      data: error.response?.data || null
-    });
+    console.error("❌ ERROR WOO:", error.response?.data || error.message);
+    res.status(500).send('Error WooCommerce');
   }
 });
 
