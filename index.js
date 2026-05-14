@@ -26,7 +26,13 @@ const CONSUMER_SECRET = 'cs_f0a533f8a25ec307a44126e421e2088b0b27f57a';
 
 const wooHttpsAgent = new https.Agent({
   lookup: (hostname, options, callback) => {
-    dns.lookup(hostname, { family: 4 }, callback);
+    dns.lookup(hostname, { family: 4 }, (err, address, family) => {
+      if (err) {
+        return callback(err);
+      }
+
+      return callback(null, address, family);
+    });
   }
 });
 // 🧠 MEMORIA
