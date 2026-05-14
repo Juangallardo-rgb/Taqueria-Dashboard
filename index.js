@@ -997,6 +997,30 @@ app.get('/refund-data/:woo_order_id', async (req, res) => {
   }
 });
 
+
+app.get('/mi-ip-render', async (req, res) => {
+  try {
+    const response = await axios.get('https://api.ipify.org?format=json', {
+      timeout: 10000
+    });
+
+    console.log("🌐 IP SALIDA RENDER:", response.data.ip);
+
+    res.json({
+      success: true,
+      outbound_ip: response.data.ip
+    });
+
+  } catch (error) {
+    console.error("❌ ERROR OBTENIENDO IP RENDER:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
 // 🚀 START
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);
