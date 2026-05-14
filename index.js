@@ -10,8 +10,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 
-const https = require('https');
-const dns = require('dns');
+
 
 const app = express();
 app.use(cors());
@@ -21,12 +20,10 @@ app.use(express.urlencoded({ extended: true }));
 const PORT = process.env.PORT || 4000;
 // 🔐 CLAVES (modo desarrollo)
 const WOO_URL = 'https://taquerialabonita.com';
-const CONSUMER_KEY = 'ck_09ccb2842a83e1b4d089505baecb6c627a8cab1c';
-const CONSUMER_SECRET = 'cs_f0a533f8a25ec307a44126e421e2088b0b27f57a';
+const CONSUMER_KEY = 'ck_37112abefee8faec1d431c0226eb4405bb64a281';
+const CONSUMER_SECRET = 'cs_dfbd70a86ba2d306d0be0ac7e0b7ebb290542777';
 
-const wooHttpsAgent = new https.Agent({
-  family: 4
-});
+
 // 🧠 MEMORIA
 let wooOrders = [];
 let shipdayOrders = [];
