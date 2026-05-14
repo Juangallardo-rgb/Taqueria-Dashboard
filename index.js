@@ -93,17 +93,19 @@ app.get('/woo-orders', async (req, res) => {
     }); 
 
     res.json(wooOrders); 
-    } catch (error) { 
+      } catch (error) { 
+    console.error("❌ ERROR WOO MESSAGE:", error.message);
+    console.error("❌ ERROR WOO CODE:", error.code);
     console.error("❌ ERROR WOO STATUS:", error.response?.status);
     console.error("❌ ERROR WOO HEADERS:", error.response?.headers);
     console.error("❌ ERROR WOO DATA:", 
       typeof error.response?.data === 'string'
         ? error.response.data.substring(0, 1000)
-        : error.response?.data || error.message
+        : error.response?.data || ''
     );
 
     res.status(500).send('Error WooCommerce'); 
-  } 
+  }
 });
 
 // ===============================
