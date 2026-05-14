@@ -59,20 +59,19 @@ app.get('/dashboard', (req, res) => {
 app.get('/woo-orders', async (req, res) => { 
   try { 
     const response = await axios.get(
-  `${WOO_URL}/wp-json/wc/v3/orders?per_page=20`,
-  { 
-    auth: { 
-      username: CONSUMER_KEY, 
-      password: CONSUMER_SECRET 
-    },
-    timeout: 30000,
-    httpsAgent: wooHttpsAgent,
-    headers: {
-      'Accept': 'application/json',
-      'User-Agent': 'Denix-Dashboard/1.0'
-    }
-  } 
-);
+      `${WOO_URL}/wp-json/wc/v3/orders?per_page=20`,
+      { 
+        auth: { 
+          username: CONSUMER_KEY, 
+          password: CONSUMER_SECRET 
+        },
+        timeout: 30000,
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Denix-Dashboard/1.0'
+        }
+      } 
+    );
 
     const wooOrders = response.data.map(order => { 
       const esPickup = order.shipping_lines?.some(
@@ -103,7 +102,8 @@ app.get('/woo-orders', async (req, res) => {
     }); 
 
     res.json(wooOrders); 
-      } catch (error) { 
+
+  } catch (error) { 
     console.error("❌ ERROR WOO MESSAGE:", error.message);
     console.error("❌ ERROR WOO CODE:", error.code);
     console.error("❌ ERROR WOO STATUS:", error.response?.status);
