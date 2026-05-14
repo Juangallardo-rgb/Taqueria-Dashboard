@@ -10,6 +10,9 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 
+const https = require('https');
+const dns = require('dns');
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -20,6 +23,12 @@ const PORT = process.env.PORT || 4000;
 const WOO_URL = 'https://taquerialabonita.com';
 const CONSUMER_KEY = 'ck_09ccb2842a83e1b4d089505baecb6c627a8cab1c';
 const CONSUMER_SECRET = 'cs_f0a533f8a25ec307a44126e421e2088b0b27f57a';
+
+const wooHttpsAgent = new https.Agent({
+  lookup: (hostname, options, callback) => {
+    dns.lookup(hostname, { family: 4 }, callback);
+  }
+});
 // 🧠 MEMORIA
 let wooOrders = [];
 let shipdayOrders = [];
@@ -61,13 +70,14 @@ app.get('/woo-orders', async (req, res) => {
       username: CONSUMER_KEY, 
       password: CONSUMER_SECRET 
     },
-    timeout: 20000,
+    timeout: 30000,
+    httpsAgent: wooHttpsAgent,
     headers: {
       'Accept': 'application/json',
       'User-Agent': 'Denix-Dashboard/1.0'
     }
   } 
-); 
+);
 
     const wooOrders = response.data.map(order => { 
       const esPickup = order.shipping_lines?.some(
