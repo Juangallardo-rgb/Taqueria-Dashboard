@@ -772,16 +772,37 @@ function abrirCrear() {
 
 async function cargarCategoriasPopup() {
 
-  const res = await fetch('/categories');
-  const data = await res.json();
-
   const select = document.getElementById('editCategoria');
-
   if (!select) return;
 
   select.innerHTML = '';
 
-  data.forEach(cat => {
+  const categoriasMap = new Map();
+
+  (productosGlobal || []).forEach(producto => {
+    const categorias = producto.categories || producto.categorias || [];
+
+    categorias.forEach(cat => {
+      if (cat && cat.id && !categoriasMap.has(cat.id)) {
+        categoriasMap.set(cat.id, {
+          id: cat.id,
+          name: cat.name || cat.nombre || 'Categoría'
+        });
+      }
+    });
+  });
+
+  const categorias = Array.from(categoriasMap.values());
+
+  if (!categorias.length) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'Sin categorías cargadas';
+    select.appendChild(option);
+    return;
+  }
+
+  categorias.forEach(cat => {
     const option = document.createElement('option');
     option.value = cat.id;
     option.textContent = cat.name;
