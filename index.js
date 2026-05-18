@@ -9,8 +9,6 @@ const axios = require('axios');
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
-if (!WEBHOOK_SECRET) console.warn("⚠️ Falta WEBHOOK_SECRET en variables de entorno");
 
 
 const app = express();
@@ -24,6 +22,8 @@ const WOO_URL = process.env.WOO_URL;
 const CONSUMER_KEY = process.env.CONSUMER_KEY;
 const CONSUMER_SECRET = process.env.CONSUMER_SECRET;
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
+
+if (!WEBHOOK_SECRET) console.warn("⚠️ Falta WEBHOOK_SECRET en variables de entorno");
 
 console.log("🔐 ENV CHECK:", {
   WOO_URL: WOO_URL || "NO CONFIGURADO",
