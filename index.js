@@ -9,7 +9,8 @@ const axios = require('axios');
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
+if (!WEBHOOK_SECRET) console.warn("⚠️ Falta WEBHOOK_SECRET en variables de entorno");
 
 
 const app = express();
@@ -57,6 +58,150 @@ app.get('/dashboard', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+
+app.post('/webhook-product', async (req, res) => {
+  try {
+    const secret = req.query.secret;
+
+    if (!WEBHOOK_SECRET || secret !== WEBHOOK_SECRET) {
+      console.log("⛔ WEBHOOK PRODUCTO RECHAZADO: secret inválido");
+      return res.status(401).json({
+        success: false,
+        message: "No autorizado"
+      });
+    }
+
+    const product = req.body;
+    const topic = req.headers['x-wc-webhook-topic'] || '';
+
+    console.log("📦 WEBHOOK PRODUCTO:", {
+      topic,
+      id: product?.id,
+      name: product?.name
+    });
+
+    if (!product || !product.id) {
+      return res.status(400).json({
+        success: false,
+        message: "Producto inválido"
+      });
+    }
+
+    const restauranteId = 1;
+    const wooProductId = String(product.id);
+
+    const imagen = product.images && product.images.length
+      ? product.images[0].src
+      : null;
+
+    const categorias = product.categories || [];
+
+    const isDeleted =
+      topic.includes('deleted') ||
+      product.status === 'trash';
+
+    await pool.query(
+      `INSERT INTO productos
+        (
+          restaurante_id,
+          woo_product_id,
+          nombre,
+          precio,
+          regular_price,
+          sale_price,
+          estado,
+          stock_status,
+          imagen,
+          categorias,
+          raw,
+          deleted,
+          updated_at
+        )
+       VALUES
+        ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+       ON CONFLICT (restaurante_id, woo_product_id)
+       DO UPDATE SET
+          nombre = EXCLUDED.nombre,
+          precio = EXCLUDED.precio,
+          regular_price = EXCLUDED.regular_price,
+          sale_price = EXCLUDED.sale_price,
+          estado = EXCLUDED.estado,
+          stock_status = EXCLUDED.stock_status,
+          imagen = EXCLUDED.imagen,
+          categorias = EXCLUDED.categorias,
+          raw = EXCLUDED.raw,
+          deleted = EXCLUDED.deleted,
+          updated_at = NOW()`,
+      [
+        restauranteId,
+        wooProductId,
+        product.name || '',
+        Number(product.price || 0),
+        Number(product.regular_price || 0),
+        Number(product.sale_price || 0),
+        product.status || '',
+        product.stock_status || '',
+        imagen,
+        JSON.stringify(categorias),
+        JSON.stringify(product),
+        isDeleted
+      ]
+    );
+
+    res.json({
+      success: true,
+      message: "Producto guardado",
+      product_id: wooProductId
+    });
+
+  } catch (error) {
+    console.error("❌ ERROR WEBHOOK PRODUCTO:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Error guardando producto",
+      error: error.message
+    });
+  }
+});
+
+
+app.get('/productos-db', async (req, res) => {
+  try {
+    const restaurante_id = req.session?.restaurante_id || 1;
+
+    const result = await pool.query(
+      `SELECT 
+        id,
+        woo_product_id,
+        nombre,
+        precio,
+        regular_price,
+        sale_price,
+        estado,
+        stock_status,
+        imagen,
+        categorias,
+        raw,
+        updated_at
+       FROM productos
+       WHERE restaurante_id = $1
+       AND deleted = false
+       ORDER BY nombre ASC`,
+      [restaurante_id]
+    );
+
+    res.json(result.rows);
+
+  } catch (error) {
+    console.error("❌ ERROR PRODUCTOS DB:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Error cargando productos desde DB"
+    });
+  }
+});
 
 // ===============================
 // 📦 WOO ORDERS
