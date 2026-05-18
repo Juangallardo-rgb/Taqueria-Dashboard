@@ -58,7 +58,6 @@ app.get('/dashboard', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-
 app.post('/webhook-product', async (req, res) => {
   try {
     const secret = req.query.secret;
@@ -74,16 +73,21 @@ app.post('/webhook-product', async (req, res) => {
     const product = req.body;
     const topic = req.headers['x-wc-webhook-topic'] || '';
 
-    console.log("📦 WEBHOOK PRODUCTO:", {
+    console.log("📦 WEBHOOK PRODUCTO RECIBIDO:", {
       topic,
       id: product?.id,
-      name: product?.name
+      name: product?.name,
+      bodyKeys: product ? Object.keys(product) : []
     });
 
+    // ✅ WooCommerce a veces manda una prueba/ping sin producto completo.
+    // No lo tratamos como error para que el webhook se pueda guardar.
     if (!product || !product.id) {
-      return res.status(400).json({
-        success: false,
-        message: "Producto inválido"
+      console.log("⚠️ Webhook recibido sin producto completo. Se ignora sin error.");
+      return res.status(200).json({
+        success: true,
+        ignored: true,
+        message: "Webhook recibido, pero sin producto completo"
       });
     }
 
@@ -147,6 +151,8 @@ app.post('/webhook-product', async (req, res) => {
         isDeleted
       ]
     );
+
+    console.log("✅ PRODUCTO GUARDADO EN SUPABASE:", wooProductId);
 
     res.json({
       success: true,
