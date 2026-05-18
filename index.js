@@ -18,10 +18,18 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 const PORT = process.env.PORT || 4000;
-// 🔐 CLAVES (modo desarrollo)
-const WOO_URL = 'https://taquerialabonita.com';
-const CONSUMER_KEY = 'ck_37112abefee8faec1d431c0226eb4405bb64a281';
-const CONSUMER_SECRET = 'cs_dfbd70a86ba2d306d0be0ac7e0b7ebb290542777';
+// 🔐 CLAVES DESDE VARIABLES DE ENTORNO
+const WOO_URL = process.env.WOO_URL;
+const CONSUMER_KEY = process.env.CONSUMER_KEY;
+const CONSUMER_SECRET = process.env.CONSUMER_SECRET;
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
+
+console.log("🔐 ENV CHECK:", {
+  WOO_URL: WOO_URL || "NO CONFIGURADO",
+  CONSUMER_KEY: CONSUMER_KEY ? "CONFIGURADO" : "NO CONFIGURADO",
+  CONSUMER_SECRET: CONSUMER_SECRET ? "CONFIGURADO" : "NO CONFIGURADO",
+  WEBHOOK_SECRET: WEBHOOK_SECRET ? "CONFIGURADO" : "NO CONFIGURADO"
+});
 
 
 // 🧠 MEMORIA
