@@ -1157,25 +1157,168 @@ app.get('/refund-data/:woo_order_id', async (req, res) => {
 });
 
 
-app.get('/mi-ip-render', async (req, res) => {
+app.post('/acciones-woo', async (req, res) => {
   try {
-    const response = await axios.get('https://api.ipify.org?format=json', {
-      timeout: 10000
-    });
+    const restaurante_id = req.session?.restaurante_id || 1;
+    const { tipo, woo_product_id, payload } = req.body;
 
-    console.log("🌐 IP SALIDA RENDER:", response.data.ip);
+    if (!tipo) {
+      return res.status(400).json({
+        success: false,
+        message: "Falta tipo de acción"
+      });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO acciones_woo
+        (restaurante_id, tipo, woo_product_id, payload, estado, created_at, updated_at)
+       VALUES
+        ($1, $2, $3, $4, 'pending', NOW(), NOW())
+       RETURNING *`,
+      [
+        restaurante_id,
+        tipo,
+        woo_product_id ? String(woo_product_id) : null,
+        JSON.stringify(payload || {})
+      ]
+    );
 
     res.json({
       success: true,
-      outbound_ip: response.data.ip
+      accion: result.rows[0]
     });
 
   } catch (error) {
-    console.error("❌ ERROR OBTENIENDO IP RENDER:", error.message);
+    console.error("❌ ERROR CREANDO ACCIÓN WOO:", error.message);
 
     res.status(500).json({
       success: false,
-      message: error.message
+      message: "Error creando acción",
+      error: error.message
+    });
+  }
+});
+
+app.get('/acciones-woo-pendientes', async (req, res) => {
+  try {
+    const secret = req.query.secret;
+
+    if (!WEBHOOK_SECRET || secret !== WEBHOOK_SECRET) {
+      return res.status(401).json({
+        success: false,
+        message: "No autorizado"
+      });
+    }
+
+    const restaurante_id = 1;
+
+    const result = await pool.query(
+      `SELECT *
+       FROM acciones_woo
+       WHERE restaurante_id = $1
+       AND estado = 'pending'
+       ORDER BY created_at ASC
+       LIMIT 10`,
+      [restaurante_id]
+    );
+
+    res.json({
+      success: true,
+      acciones: result.rows
+    });
+
+  } catch (error) {
+    console.error("❌ ERROR ACCIONES PENDIENTES:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Error obteniendo acciones pendientes"
+    });
+  }
+});
+
+app.get('/acciones-woo-pendientes', async (req, res) => {
+  try {
+    const secret = req.query.secret;
+
+    if (!WEBHOOK_SECRET || secret !== WEBHOOK_SECRET) {
+      return res.status(401).json({
+        success: false,
+        message: "No autorizado"
+      });
+    }
+
+    const restaurante_id = 1;
+
+    const result = await pool.query(
+      `SELECT *
+       FROM acciones_woo
+       WHERE restaurante_id = $1
+       AND estado = 'pending'
+       ORDER BY created_at ASC
+       LIMIT 10`,
+      [restaurante_id]
+    );
+
+    res.json({
+      success: true,
+      acciones: result.rows
+    });
+
+  } catch (error) {
+    console.error("❌ ERROR ACCIONES PENDIENTES:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Error obteniendo acciones pendientes"
+    });
+  }
+});
+
+app.post('/acciones-woo/:id/resultado', async (req, res) => {
+  try {
+    const secret = req.query.secret;
+
+    if (!WEBHOOK_SECRET || secret !== WEBHOOK_SECRET) {
+      return res.status(401).json({
+        success: false,
+        message: "No autorizado"
+      });
+    }
+
+    const accionId = req.params.id;
+    const { success, resultado, error } = req.body;
+
+    const nuevoEstado = success ? 'completed' : 'failed';
+
+    const result = await pool.query(
+      `UPDATE acciones_woo
+       SET estado = $1,
+           resultado = $2,
+           error = $3,
+           updated_at = NOW(),
+           completed_at = NOW()
+       WHERE id = $4
+       RETURNING *`,
+      [
+        nuevoEstado,
+        JSON.stringify(resultado || {}),
+        error || null,
+        accionId
+      ]
+    );
+
+    res.json({
+      success: true,
+      accion: result.rows[0]
+    });
+
+  } catch (error) {
+    console.error("❌ ERROR RESULTADO ACCIÓN:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Error guardando resultado"
     });
   }
 });
