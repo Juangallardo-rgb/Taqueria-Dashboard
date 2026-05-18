@@ -407,41 +407,82 @@ async function verProductos() {
   const contenedor = document.getElementById('contenedor');
 
   // FORMULARIO
- contenido.innerHTML = `
-  <div class="card">
-    <h2>Productos</h2>
-    <input id="buscadorProductos" placeholder="🔍 Buscar producto..." oninput="filtrarProductos()" />
-    <button onclick="abrirCrear()">➕ Crear Producto</button>
-  </div>
-`;
-  
+  contenido.innerHTML = `
+    <div class="card">
+      <h2>Productos</h2>
+      <input id="buscadorProductos" placeholder="🔍 Buscar producto..." oninput="filtrarProductos()" />
+      <button onclick="abrirCrear()">➕ Crear Producto</button>
+    </div>
+  `;
+
   contenedor.innerHTML = '<p>Cargando productos...</p>';
 
-  // CATEGORÍAS (NO BLOQUEA)
   try {
-    await cargarCategorias();
-  } catch (e) {
-    console.log("⚠️ Error cargando categorías", e);
-  }
+    // 🔥 NUEVO: leer productos desde Supabase, no desde WooCommerce
+    const res = await fetch('/productos-db?ts=' + Date.now());
 
-  // PRODUCTOS
-  try {
-    const res = await fetch('/products?ts=' + Date.now());
-
-    if (!res.ok) throw new Error("Error products");
+    if (!res.ok) throw new Error("Error productos-db");
 
     const data = await res.json();
 
-    productosGlobal = data;
+    // 🔥 Convertimos productos de Supabase a formato compatible con tu render actual
+    const productos = data.map(p => {
 
-    if (!data.length) {
+      const raw = p.raw || {};
+
+      return {
+        ...raw,
+
+        // IDs
+        id: Number(p.woo_product_id),
+        woo_product_id: p.woo_product_id,
+
+        // Datos principales
+        name: p.nombre || raw.name || 'Producto',
+        nombre: p.nombre || raw.name || 'Producto',
+
+        price: String(p.precio ?? raw.price ?? '0'),
+        regular_price: String(p.regular_price ?? raw.regular_price ?? '0'),
+        sale_price: String(p.sale_price ?? raw.sale_price ?? ''),
+
+        status: p.estado || raw.status || '',
+        stock_status: p.stock_status || raw.stock_status || '',
+
+        // Imagen compatible con Woo
+        images: p.imagen
+          ? [{ src: p.imagen }]
+          : (raw.images || []),
+
+        // Categorías compatibles
+        categories: p.categorias || raw.categories || [],
+
+        // Guardamos también el producto original de Supabase
+        db_id: p.id,
+        updated_at: p.updated_at
+      };
+    });
+
+    productosGlobal = productos;
+
+    if (!productos.length) {
       contenedor.innerHTML = "<p>No hay productos</p>";
       return;
     }
 
+    // 🔥 Creamos categorías desde los productos guardados en DB
+    window.categoriasGlobal = [];
+
+    productos.forEach(producto => {
+      (producto.categories || []).forEach(cat => {
+        if (!window.categoriasGlobal.some(c => c.id === cat.id)) {
+          window.categoriasGlobal.push(cat);
+        }
+      });
+    });
+
     contenedor.innerHTML = '';
 
-    renderProductos(data);
+    renderProductos(productos);
 
   } catch (error) {
     console.error("❌ ERROR PRODUCTOS:", error);
