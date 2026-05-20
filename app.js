@@ -584,22 +584,43 @@ function renderProductos(lista) {
   }
 
   lista.forEach(p => {
+
+    // ✅ ID real de WooCommerce
+    const productId = p.id || p.woo_product_id;
+
+    // ✅ Nombre compatible con Supabase/Woo
+    const nombre = p.name || p.nombre || 'Producto';
+
+    // ✅ Precio compatible con Supabase/Woo
+    const precio = parseFloat(
+      p.price || 
+      p.precio || 
+      p.regular_price || 
+      0
+    );
+
+    // ✅ Stock compatible
+    const stock = p.stock_status || 'instock';
+
     contenedor.innerHTML += `
       <div class="card">
-        <h3>${p.name}</h3>
-        <p>$${parseFloat(p.price || p.regular_price).toFixed(2)}</p>
+        <h3>${nombre}</h3>
+
+        <p>$${precio.toFixed(2)}</p>
+
         <p>
-         ${p.stock_status === 'instock' 
-        ? '🟢 Disponible' 
-        : '🔴 No disponible'}
+          ${stock === 'instock' 
+            ? '🟢 Disponible' 
+            : '🔴 No disponible'}
         </p>
 
-        <button onclick="abrirEditar(${p.id})">Editar</button>
-        <button onclick="eliminarProducto(${p.id})">Eliminar</button>
+        <button onclick="abrirEditar(${productId})">Editar</button>
+        <button onclick="eliminarProducto(${productId})">Eliminar</button>
       </div>
     `;
   });
 }
+
 function editarProducto(id) {
 
   const producto = productosGlobal.find(p => p.id == id);
@@ -628,85 +649,147 @@ async function eliminarProducto(id) {
   if (!confirm("¿Eliminar este producto?")) return;
 
   try {
-    const res = await fetch(`/products/${id}`, {
-      method: 'DELETE'
+
+    const res = await fetch('/acciones-woo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tipo: 'delete_product',
+        woo_product_id: id,
+        payload: {}
+      })
     });
 
-    if (!res.ok) throw new Error("Error eliminando");
+    const data = await res.json();
 
-    // actualizar lista local
-    productosGlobal = productosGlobal.filter(p => p.id != id);
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || "Error creando acción de eliminación");
+    }
 
-    renderProductos(productosGlobal);
+    alert("✅ Eliminación enviada. Ejecuta el puente en WordPress para aplicarla.");
 
-    console.log("✅ Producto eliminado");
-    verProductos(); // recargar lista
+    console.log("✅ Acción eliminar producto creada:", data);
+
+    // No lo quitamos todavía de la lista porque Woo debe eliminarlo primero.
+    // Luego el webhook Product deleted actualizará Supabase.
+    verProductos();
 
   } catch (error) {
-    console.error("❌ ERROR ELIMINAR:", error);
+    console.error("❌ ERROR ELIMINAR PRODUCTO:", error);
     alert("Error eliminando producto");
   }
 }
 
 async function guardarProducto() {
 
-  const nombre = document.getElementById('nombre').value;
-  const precio = document.getElementById('precio').value;
-  const descripcion = document.getElementById('descripcion').value;
-  const categoria = document.getElementById('categoria').value;
+  // 🔥 Soporta ambos nombres de inputs por seguridad
+  const nombreInput = document.getElementById('nombre') || document.getElementById('editNombre');
+  const precioInput = document.getElementById('precio') || document.getElementById('editPrecio');
+  const descripcionInput = document.getElementById('descripcion') || document.getElementById('editDescripcion');
+  const categoriaInput = document.getElementById('categoria') || document.getElementById('editCategoria');
 
-  const data = {
+  const nombre = nombreInput ? nombreInput.value.trim() : '';
+  const precio = precioInput ? precioInput.value.trim() : '';
+  const descripcion = descripcionInput ? descripcionInput.value.trim() : '';
+  const categoria = categoriaInput ? categoriaInput.value : '';
+
+  if (!nombre) {
+    alert("Ingresa el nombre del producto");
+    return;
+  }
+
+  if (!precio) {
+    alert("Ingresa el precio del producto");
+    return;
+  }
+
+  const payload = {
     name: nombre,
     regular_price: precio,
+    price: precio,
     description: descripcion,
-    categories: [{ id: parseInt(categoria) }]
+    status: 'publish',
+    stock_status: 'instock'
   };
+
+  if (categoria) {
+    payload.categories = [{ id: parseInt(categoria) }];
+  }
 
   try {
 
-    let url = '/products';
-    let method = 'POST';
+    let tipo = 'create_product';
+    let wooProductId = null;
 
     // 🔥 SI ESTÁ EDITANDO
     if (productoEditando) {
-      url = `/products/${productoEditando}`;
-      method = 'PUT';
+      tipo = 'update_product';
+      wooProductId = productoEditando;
     }
 
-    const res = await fetch(url, {
-      method: method,
+    const res = await fetch('/acciones-woo', {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
+      body: JSON.stringify({
+        tipo,
+        woo_product_id: wooProductId,
+        payload
+      })
     });
 
-    if (!res.ok) throw new Error("Error guardando");
+    const data = await res.json();
+
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || "Error creando acción");
+    }
 
     productoEditando = null;
 
-    verProductos(); // recargar lista
+    const popup = document.getElementById('popupEditar');
+    if (popup) {
+      popup.classList.remove('active');
+    }
 
-    console.log("✅ Producto guardado");
+    alert("✅ Acción enviada. Ejecuta el puente en WordPress para aplicar el cambio.");
+
+    verProductos();
+
+    console.log("✅ Acción producto creada:", data);
 
   } catch (error) {
-    console.error("❌ ERROR GUARDAR:", error);
+    console.error("❌ ERROR GUARDAR PRODUCTO:", error);
     alert("Error guardando producto");
   }
 }
 
-function abrirEditar(id) {
-  cargarCategoriasPopup();
+async function abrirEditar(id) {
 
-  const p = productosGlobal.find(p => p.id == id);
+  await cargarCategoriasPopup();
 
-  if (!p) return;
+  const p = productosGlobal.find(p => p.id == id || p.woo_product_id == id);
 
-  document.getElementById('editNombre').value = p.name || '';
-  document.getElementById('editPrecio').value = p.price || '';
-  document.getElementById('editDescripcion').value = p.description || '';
-  document.getElementById('editStock').value = p.stock_status || 'instock';
+  if (!p) {
+    alert("Producto no encontrado");
+    return;
+  }
+
+  document.getElementById('editNombre').value = p.name || p.nombre || '';
+  document.getElementById('editPrecio').value = p.price || p.precio || '';
+  document.getElementById('editDescripcion').value = p.description || p.raw?.description || '';
+  
+  const stockInput = document.getElementById('editStock');
+  if (stockInput) {
+    stockInput.value = p.stock_status || 'instock';
+  }
+
+  const categoriaInput = document.getElementById('editCategoria');
+  if (categoriaInput && p.categories && p.categories.length) {
+    categoriaInput.value = p.categories[0].id;
+  }
+
+  productoEditando = p.id || p.woo_product_id || id;
+
   document.getElementById('popupEditar').classList.add('active');
-
-  productoEditando = id;
 }
 
 function cerrarEditar() {
@@ -715,57 +798,89 @@ function cerrarEditar() {
 
 async function guardarEdicion() {
 
-  const nombre = document.getElementById('editNombre').value;
-  const precio = document.getElementById('editPrecio').value;
-  const descripcion = document.getElementById('editDescripcion').value;
+  const nombre = document.getElementById('editNombre').value.trim();
+  const precio = document.getElementById('editPrecio').value.trim();
+  const descripcion = document.getElementById('editDescripcion').value.trim();
   const categoria = document.getElementById('editCategoria').value;
   const stock = document.getElementById('editStock').value;
 
+  if (!nombre) {
+    alert("Ingresa el nombre del producto");
+    return;
+  }
+
+  if (!precio) {
+    alert("Ingresa el precio del producto");
+    return;
+  }
+
   try {
 
-    let url = '/products';
-    let method = 'POST';
+    let tipo = 'create_product';
+    let wooProductId = null;
 
     // 👉 SI ESTÁ EDITANDO
     if (productoEditando) {
-      url = `/products/${productoEditando}`;
-      method = 'PUT';
+      tipo = 'update_product';
+      wooProductId = productoEditando;
     }
 
-    const res = await fetch(url, {
-      method: method,
+    const payload = {
+      name: nombre,
+      regular_price: precio,
+      price: precio,
+      description: descripcion,
+      stock_status: stock,
+      status: 'publish'
+    };
+
+    if (categoria) {
+      payload.categories = [{ id: parseInt(categoria) }];
+    }
+
+    const res = await fetch('/acciones-woo', {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: nombre,
-        regular_price: precio,
-        description: descripcion,
-        categories: [{ id: parseInt(categoria) }],
-        stock_status: stock
+        tipo,
+        woo_product_id: wooProductId,
+        payload
       })
     });
 
-    if (!res.ok) throw new Error("Error guardando");
+    const data = await res.json();
+
+    if (!res.ok || !data.success) {
+      throw new Error(data.message || "Error creando acción");
+    }
 
     cerrarEditar();
     productoEditando = null;
 
+    alert("✅ Cambio enviado. Ejecuta el puente en WordPress para aplicarlo.");
+
     verProductos();
 
   } catch (error) {
-    console.error("❌ ERROR GUARDAR:", error);
+    console.error("❌ ERROR GUARDAR EDICIÓN:", error);
     alert("Error guardando producto");
   }
 }
 
-function abrirCrear() {
+async function abrirCrear() {
 
-  cargarCategoriasPopup();
+  await cargarCategoriasPopup();
 
   productoEditando = null;
 
   document.getElementById('editNombre').value = '';
   document.getElementById('editPrecio').value = '';
   document.getElementById('editDescripcion').value = '';
+
+  const categoria = document.getElementById('editCategoria');
+  if (categoria) {
+    categoria.selectedIndex = 0;
+  }
 
   document.getElementById('popupEditar').classList.add('active');
 }
