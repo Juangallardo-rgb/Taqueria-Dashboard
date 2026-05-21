@@ -10,16 +10,28 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 
+
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 const PORT = process.env.PORT || 4000;
-// 🔐 CLAVES (modo desarrollo)
+// 🔐 CLAVES DESDE VARIABLES DE ENTORNO
 const WOO_URL = process.env.WOO_URL;
-const CONSUMER_KEY = process.env.WOO_CONSUMER_KEY;
-const CONSUMER_SECRET = process.env.WOO_CONSUMER_SECRET;
+const CONSUMER_KEY = process.env.CONSUMER_KEY;
+const CONSUMER_SECRET = process.env.CONSUMER_SECRET;
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
+
+if (!WEBHOOK_SECRET) console.warn("⚠️ Falta WEBHOOK_SECRET en variables de entorno");
+
+console.log("🔐 ENV CHECK:", {
+  WOO_URL: WOO_URL || "NO CONFIGURADO",
+  CONSUMER_KEY: CONSUMER_KEY ? "CONFIGURADO" : "NO CONFIGURADO",
+  CONSUMER_SECRET: CONSUMER_SECRET ? "CONFIGURADO" : "NO CONFIGURADO",
+  WEBHOOK_SECRET: WEBHOOK_SECRET ? "CONFIGURADO" : "NO CONFIGURADO"
+});
+
 
 // 🧠 MEMORIA
 let wooOrders = [];
@@ -46,6 +58,156 @@ app.get('/dashboard', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+app.post('/webhook-product', async (req, res) => {
+  try {
+    const secret = req.query.secret;
+
+    if (!WEBHOOK_SECRET || secret !== WEBHOOK_SECRET) {
+      console.log("⛔ WEBHOOK PRODUCTO RECHAZADO: secret inválido");
+      return res.status(401).json({
+        success: false,
+        message: "No autorizado"
+      });
+    }
+
+    const product = req.body;
+    const topic = req.headers['x-wc-webhook-topic'] || '';
+
+    console.log("📦 WEBHOOK PRODUCTO RECIBIDO:", {
+      topic,
+      id: product?.id,
+      name: product?.name,
+      bodyKeys: product ? Object.keys(product) : []
+    });
+
+    // ✅ WooCommerce a veces manda una prueba/ping sin producto completo.
+    // No lo tratamos como error para que el webhook se pueda guardar.
+    if (!product || !product.id) {
+      console.log("⚠️ Webhook recibido sin producto completo. Se ignora sin error.");
+      return res.status(200).json({
+        success: true,
+        ignored: true,
+        message: "Webhook recibido, pero sin producto completo"
+      });
+    }
+
+    const restauranteId = 1;
+    const wooProductId = String(product.id);
+
+    const imagen = product.images && product.images.length
+      ? product.images[0].src
+      : null;
+
+    const categorias = product.categories || [];
+
+    const isDeleted =
+      topic.includes('deleted') ||
+      product.status === 'trash';
+
+    await pool.query(
+      `INSERT INTO productos
+        (
+          restaurante_id,
+          woo_product_id,
+          nombre,
+          precio,
+          regular_price,
+          sale_price,
+          estado,
+          stock_status,
+          imagen,
+          categorias,
+          raw,
+          deleted,
+          updated_at
+        )
+       VALUES
+        ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+       ON CONFLICT (restaurante_id, woo_product_id)
+       DO UPDATE SET
+          nombre = EXCLUDED.nombre,
+          precio = EXCLUDED.precio,
+          regular_price = EXCLUDED.regular_price,
+          sale_price = EXCLUDED.sale_price,
+          estado = EXCLUDED.estado,
+          stock_status = EXCLUDED.stock_status,
+          imagen = EXCLUDED.imagen,
+          categorias = EXCLUDED.categorias,
+          raw = EXCLUDED.raw,
+          deleted = EXCLUDED.deleted,
+          updated_at = NOW()`,
+      [
+        restauranteId,
+        wooProductId,
+        product.name || '',
+        Number(product.price || 0),
+        Number(product.regular_price || 0),
+        Number(product.sale_price || 0),
+        product.status || '',
+        product.stock_status || '',
+        imagen,
+        JSON.stringify(categorias),
+        JSON.stringify(product),
+        isDeleted
+      ]
+    );
+
+    console.log("✅ PRODUCTO GUARDADO EN SUPABASE:", wooProductId);
+
+    res.json({
+      success: true,
+      message: "Producto guardado",
+      product_id: wooProductId
+    });
+
+  } catch (error) {
+    console.error("❌ ERROR WEBHOOK PRODUCTO:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Error guardando producto",
+      error: error.message
+    });
+  }
+});
+
+
+app.get('/productos-db', async (req, res) => {
+  try {
+    const restaurante_id = req.session?.restaurante_id || 1;
+
+    const result = await pool.query(
+      `SELECT 
+        id,
+        woo_product_id,
+        nombre,
+        precio,
+        regular_price,
+        sale_price,
+        estado,
+        stock_status,
+        imagen,
+        categorias,
+        raw,
+        updated_at
+       FROM productos
+       WHERE restaurante_id = $1
+       AND deleted = false
+       ORDER BY nombre ASC`,
+      [restaurante_id]
+    );
+
+    res.json(result.rows);
+
+  } catch (error) {
+    console.error("❌ ERROR PRODUCTOS DB:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Error cargando productos desde DB"
+    });
+  }
+});
 
 // ===============================
 // 📦 WOO ORDERS
@@ -53,86 +215,67 @@ app.get('/dashboard', (req, res) => {
 // ===============================
 // 🔥 GET WOO ORDERS (OPTIMIZADO)
 // ===============================
-app.get('/woo-orders', async (req, res) => {
-  try {
-    if (!WOO_URL || !CONSUMER_KEY || !CONSUMER_SECRET) {
-      console.error("❌ Faltan variables de WooCommerce:", {
-        WOO_URL: !!WOO_URL,
-        WOO_CONSUMER_KEY: !!CONSUMER_KEY,
-        WOO_CONSUMER_SECRET: !!CONSUMER_SECRET
-      });
-
-      return res.status(500).json({
-        message: "Faltan variables de entorno de WooCommerce"
-      });
-    }
-
-    const cleanWooUrl = WOO_URL.replace(/\/$/, '');
-
+app.get('/woo-orders', async (req, res) => { 
+  try { 
     const response = await axios.get(
-      `${cleanWooUrl}/wp-json/wc/v3/orders`,
-      {
-        params: {
-          per_page: 20,
-          consumer_key: CONSUMER_KEY,
-          consumer_secret: CONSUMER_SECRET
+      `${WOO_URL}/wp-json/wc/v3/orders?per_page=20`,
+      { 
+        auth: { 
+          username: CONSUMER_KEY, 
+          password: CONSUMER_SECRET 
         },
+        timeout: 30000,
         headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'Taqueria-Dashboard/1.0'
-        },
-        timeout: 20000
-      }
+          'Accept': 'application/json',
+          'User-Agent': 'Denix-Dashboard/1.0'
+        }
+      } 
     );
 
-    const wooOrders = response.data.map(order => {
+    const wooOrders = response.data.map(order => { 
       const esPickup = order.shipping_lines?.some(
         l => l.method_id === 'local_pickup'
-      );
+      ); 
+      
+      return { 
+        id: order.id, 
+        total: order.total, 
+        estado: order.status, 
+        customer_name: `${(order.billing?.first_name || '')} ${(order.billing?.last_name || '')}`.trim() || 'Cliente', 
+        direccion: order.shipping?.address_1 || '', 
+        ciudad: order.shipping?.city || '', 
+        estado_envio: esPickup ? 'pickup' : 'delivery', 
+        created_at: order.date_created, 
+        items: (order.line_items || []).map(item => { 
+          const extras = (item.meta_data || []) 
+            .filter(m => m.value && m.value !== '') 
+            .map(m => `${m.key}: ${m.value}`) 
+            .join(', '); 
+          
+          return { 
+            nombre: `${item.name}${extras ? ` (${extras})` : ''}`, 
+            cantidad: item.quantity 
+          }; 
+        }) 
+      }; 
+    }); 
 
-      return {
-        id: order.id,
-        total: order.total,
-        estado: order.status,
+    res.json(wooOrders); 
 
-        customer_name: `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
-
-        direccion: order.shipping?.address_1 || order.billing?.address_1 || '',
-        ciudad: order.shipping?.city || order.billing?.city || '',
-
-        estado_envio: esPickup ? 'pickup' : 'delivery',
-
-        created_at: order.date_created,
-
-        items: (order.line_items || []).map(item => {
-          const extras = (item.meta_data || [])
-            .filter(m => m.value && m.value !== '')
-            .map(m => `${m.key}: ${m.value}`)
-            .join(', ');
-
-          return {
-            nombre: `${item.name}${extras ? ` (${extras})` : ''}`,
-            cantidad: item.quantity
-          };
-        })
-      };
-    });
-
-    res.json(wooOrders);
-
-  } catch (error) {
+  } catch (error) { 
+    console.error("❌ ERROR WOO MESSAGE:", error.message);
+    console.error("❌ ERROR WOO CODE:", error.code);
     console.error("❌ ERROR WOO STATUS:", error.response?.status);
-    console.error("❌ ERROR WOO DATA:", error.response?.data || error.message);
+    console.error("❌ ERROR WOO HEADERS:", error.response?.headers);
+    console.error("❌ ERROR WOO DATA:", 
+      typeof error.response?.data === 'string'
+        ? error.response.data.substring(0, 1000)
+        : error.response?.data || ''
+    );
 
-    res.status(500).json({
-      message: "Error WooCommerce",
-      status: error.response?.status || null,
-      error: error.message,
-      data: error.response?.data || null
-    });
+    res.status(500).send('Error WooCommerce'); 
   }
 });
-
 
 // ===============================
 // 🔥 WEBHOOK WOO (CORREGIDO)
@@ -1013,16 +1156,172 @@ app.get('/refund-data/:woo_order_id', async (req, res) => {
   }
 });
 
-app.get('/debug-env', (req, res) => {
-  res.json({
-    WOO_URL: process.env.WOO_URL || null,
-    WOO_CONSUMER_KEY_EXISTS: !!process.env.WOO_CONSUMER_KEY,
-    WOO_CONSUMER_SECRET_EXISTS: !!process.env.WOO_CONSUMER_SECRET,
-    DATABASE_URL_EXISTS: !!process.env.DATABASE_URL
-  });
+
+app.post('/acciones-woo', async (req, res) => {
+  try {
+    const restaurante_id = req.session?.restaurante_id || 1;
+    const { tipo, woo_product_id, payload } = req.body;
+
+    if (!tipo) {
+      return res.status(400).json({
+        success: false,
+        message: "Falta tipo de acción"
+      });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO acciones_woo
+        (restaurante_id, tipo, woo_product_id, payload, estado, created_at, updated_at)
+       VALUES
+        ($1, $2, $3, $4, 'pending', NOW(), NOW())
+       RETURNING *`,
+      [
+        restaurante_id,
+        tipo,
+        woo_product_id ? String(woo_product_id) : null,
+        JSON.stringify(payload || {})
+      ]
+    );
+
+    res.json({
+      success: true,
+      accion: result.rows[0]
+    });
+
+  } catch (error) {
+    console.error("❌ ERROR CREANDO ACCIÓN WOO:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Error creando acción",
+      error: error.message
+    });
+  }
 });
 
+app.get('/acciones-woo-pendientes', async (req, res) => {
+  try {
+    const secret = req.query.secret;
 
+    if (!WEBHOOK_SECRET || secret !== WEBHOOK_SECRET) {
+      return res.status(401).json({
+        success: false,
+        message: "No autorizado"
+      });
+    }
+
+    const restaurante_id = 1;
+
+    const result = await pool.query(
+      `SELECT *
+       FROM acciones_woo
+       WHERE restaurante_id = $1
+       AND estado = 'pending'
+       ORDER BY created_at ASC
+       LIMIT 10`,
+      [restaurante_id]
+    );
+
+    res.json({
+      success: true,
+      acciones: result.rows
+    });
+
+  } catch (error) {
+    console.error("❌ ERROR ACCIONES PENDIENTES:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Error obteniendo acciones pendientes"
+    });
+  }
+});
+
+app.get('/acciones-woo-pendientes', async (req, res) => {
+  try {
+    const secret = req.query.secret;
+
+    if (!WEBHOOK_SECRET || secret !== WEBHOOK_SECRET) {
+      return res.status(401).json({
+        success: false,
+        message: "No autorizado"
+      });
+    }
+
+    const restaurante_id = 1;
+
+    const result = await pool.query(
+      `SELECT *
+       FROM acciones_woo
+       WHERE restaurante_id = $1
+       AND estado = 'pending'
+       ORDER BY created_at ASC
+       LIMIT 10`,
+      [restaurante_id]
+    );
+
+    res.json({
+      success: true,
+      acciones: result.rows
+    });
+
+  } catch (error) {
+    console.error("❌ ERROR ACCIONES PENDIENTES:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Error obteniendo acciones pendientes"
+    });
+  }
+});
+
+app.post('/acciones-woo/:id/resultado', async (req, res) => {
+  try {
+    const secret = req.query.secret;
+
+    if (!WEBHOOK_SECRET || secret !== WEBHOOK_SECRET) {
+      return res.status(401).json({
+        success: false,
+        message: "No autorizado"
+      });
+    }
+
+    const accionId = req.params.id;
+    const { success, resultado, error } = req.body;
+
+    const nuevoEstado = success ? 'completed' : 'failed';
+
+    const result = await pool.query(
+      `UPDATE acciones_woo
+       SET estado = $1,
+           resultado = $2,
+           error = $3,
+           updated_at = NOW(),
+           completed_at = NOW()
+       WHERE id = $4
+       RETURNING *`,
+      [
+        nuevoEstado,
+        JSON.stringify(resultado || {}),
+        error || null,
+        accionId
+      ]
+    );
+
+    res.json({
+      success: true,
+      accion: result.rows[0]
+    });
+
+  } catch (error) {
+    console.error("❌ ERROR RESULTADO ACCIÓN:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Error guardando resultado"
+    });
+  }
+});
 
 // 🚀 START
 app.listen(PORT, () => {
@@ -1037,6 +1336,7 @@ app.get('/test-db', async (req, res) => {
     console.error(error);
     res.status(500).send('Error conexión DB');
   }
+
 }); 
 app.use(express.static(__dirname));
 
