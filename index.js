@@ -9,6 +9,7 @@ const axios = require('axios');
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const webpush = require('web-push');
 
 
 const app = express();
@@ -22,6 +23,23 @@ const WOO_URL = process.env.WOO_URL;
 const CONSUMER_KEY = process.env.CONSUMER_KEY;
 const CONSUMER_SECRET = process.env.CONSUMER_SECRET;
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
+
+// 🔔 PUSH NOTIFICATIONS
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT;
+
+if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY && VAPID_SUBJECT) {
+  webpush.setVapidDetails(
+    VAPID_SUBJECT,
+    VAPID_PUBLIC_KEY,
+    VAPID_PRIVATE_KEY
+  );
+
+  console.log("🔔 Web Push configurado correctamente");
+} else {
+  console.warn("⚠️ Faltan variables VAPID para notificaciones push");
+}
 
 if (!WEBHOOK_SECRET) console.warn("⚠️ Falta WEBHOOK_SECRET en variables de entorno");
 
@@ -1321,6 +1339,21 @@ app.post('/acciones-woo/:id/resultado', async (req, res) => {
       message: "Error guardando resultado"
     });
   }
+});
+
+// 🔔 Entregar clave pública para suscribir dispositivos
+app.get('/push-public-key', (req, res) => {
+  if (!VAPID_PUBLIC_KEY) {
+    return res.status(500).json({
+      success: false,
+      message: 'VAPID_PUBLIC_KEY no configurada'
+    });
+  }
+
+  res.json({
+    success: true,
+    publicKey: VAPID_PUBLIC_KEY
+  });
 });
 
 // 🚀 START
