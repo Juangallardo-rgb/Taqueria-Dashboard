@@ -1356,6 +1356,193 @@ app.get('/push-public-key', (req, res) => {
   });
 });
 
+// ======================================================
+// 🔔 GUARDAR SUSCRIPCIÓN PUSH DEL DISPOSITIVO
+// ======================================================
+app.post('/push-subscribe', async (req, res) => {
+  try {
+    const restaurante_id = req.session?.restaurante_id || 1;
+    const subscription = req.body;
+
+    if (
+      !subscription ||
+      !subscription.endpoint ||
+      !subscription.keys ||
+      !subscription.keys.p256dh ||
+      !subscription.keys.auth
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Suscripción push inválida'
+      });
+    }
+
+    await pool.query(
+      `INSERT INTO push_subscriptions
+        (
+          restaurante_id,
+          endpoint,
+          p256dh,
+          auth,
+          user_agent,
+          activo,
+          updated_at
+        )
+       VALUES
+        ($1, $2, $3, $4, $5, true, NOW())
+       ON CONFLICT (endpoint)
+       DO UPDATE SET
+          restaurante_id = EXCLUDED.restaurante_id,
+          p256dh = EXCLUDED.p256dh,
+          auth = EXCLUDED.auth,
+          user_agent = EXCLUDED.user_agent,
+          activo = true,
+          updated_at = NOW()`,
+      [
+        restaurante_id,
+        subscription.endpoint,
+        subscription.keys.p256dh,
+        subscription.keys.auth,
+        req.headers['user-agent'] || null
+      ]
+    );
+
+    console.log('🔔 Dispositivo suscrito a push:', {
+      restaurante_id,
+      endpoint: subscription.endpoint.substring(0, 45) + '...'
+    });
+
+    res.json({
+      success: true,
+      message: 'Notificaciones activadas correctamente'
+    });
+
+  } catch (error) {
+    console.error('❌ ERROR GUARDANDO PUSH SUBSCRIPTION:', error.message);
+
+    res.status(500).json({
+      success: false,
+      message: 'Error activando notificaciones'
+    });
+  }
+});
+
+// ======================================================
+// 🔕 DESACTIVAR SUSCRIPCIÓN PUSH DEL DISPOSITIVO
+// ======================================================
+app.post('/push-unsubscribe', async (req, res) => {
+  try {
+    const { endpoint } = req.body;
+
+    if (!endpoint) {
+      return res.status(400).json({
+        success: false,
+        message: 'Falta endpoint de suscripción'
+      });
+    }
+
+    await pool.query(
+      `UPDATE push_subscriptions
+       SET activo = false,
+           updated_at = NOW()
+       WHERE endpoint = $1`,
+      [endpoint]
+    );
+
+    res.json({
+      success: true,
+      message: 'Notificaciones desactivadas'
+    });
+
+  } catch (error) {
+    console.error('❌ ERROR DESACTIVANDO PUSH:', error.message);
+
+    res.status(500).json({
+      success: false,
+      message: 'Error desactivando notificaciones'
+    });
+  }
+});
+
+// ======================================================
+// 🧪 ENVIAR NOTIFICACIÓN PUSH DE PRUEBA
+// ======================================================
+app.post('/push-test', async (req, res) => {
+  try {
+    const restaurante_id = req.session?.restaurante_id || 1;
+
+    const result = await pool.query(
+      `SELECT id, endpoint, p256dh, auth
+       FROM push_subscriptions
+       WHERE restaurante_id = $1
+       AND activo = true`,
+      [restaurante_id]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({
+        success: false,
+        message: 'No hay dispositivos suscritos para este restaurante'
+      });
+    }
+
+    const payload = JSON.stringify({
+      title: '🔔 Notificación Denix activada',
+      body: 'Tu dispositivo ya puede recibir alertas de nuevos pedidos.',
+      url: '/',
+      tag: 'denix-prueba-notificaciones'
+    });
+
+    let enviados = 0;
+    let desactivados = 0;
+
+    for (const dispositivo of result.rows) {
+      const subscription = {
+        endpoint: dispositivo.endpoint,
+        keys: {
+          p256dh: dispositivo.p256dh,
+          auth: dispositivo.auth
+        }
+      };
+
+      try {
+        await webpush.sendNotification(subscription, payload);
+        enviados++;
+
+      } catch (error) {
+        console.error('❌ ERROR ENVIANDO PUSH:', error.statusCode || error.message);
+
+        // Si la suscripción ya no existe o fue revocada, la desactivamos.
+        if (error.statusCode === 404 || error.statusCode === 410) {
+          await pool.query(
+            `UPDATE push_subscriptions
+             SET activo = false,
+                 updated_at = NOW()
+             WHERE id = $1`,
+            [dispositivo.id]
+          );
+
+          desactivados++;
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      enviados,
+      desactivados
+    });
+
+  } catch (error) {
+    console.error('❌ ERROR PUSH TEST:', error.message);
+
+    res.status(500).json({
+      success: false,
+      message: 'Error enviando notificación de prueba'
+    });
+  }
+});
+
 // 🚀 START
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);
