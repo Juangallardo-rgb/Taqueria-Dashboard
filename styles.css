@@ -891,3 +891,130 @@ body {
   font-weight: bold;
   color: #dc3545;
 }
+
+/* ====================================================== */
+/* 🔔 MODAL NOTIFICACIONES PUSH                           */
+/* ====================================================== */
+
+.push-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(15, 23, 42, 0.62);
+  z-index: 10050;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.push-overlay.active {
+  display: flex;
+}
+
+.push-box {
+  width: 100%;
+  max-width: 390px;
+  background: #ffffff;
+  border-radius: 22px;
+  padding: 28px 22px 22px;
+  text-align: center;
+  box-shadow: 0 20px 55px rgba(15, 23, 42, 0.28);
+  animation: pushModalEntrada 0.22s ease-out;
+}
+
+@keyframes pushModalEntrada {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.push-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff7ed;
+  border-radius: 50%;
+  font-size: 31px;
+}
+
+.push-box h2 {
+  margin: 0 0 10px;
+  color: #111827;
+  font-size: 22px;
+  font-weight: 750;
+}
+
+.push-text {
+  margin: 0 0 22px;
+  color: #4b5563;
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+
+.btn-push-activar {
+  width: 100%;
+  background: #f97316;
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  padding: 13px 16px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+
+.btn-push-activar:hover {
+  background: #ea580c;
+}
+
+.btn-push-activar:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.btn-push-despues {
+  width: 100%;
+  background: transparent;
+  color: #6b7280;
+  border: none;
+  padding: 10px 16px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.btn-push-despues:hover {
+  color: #374151;
+}
+
+.push-mensaje {
+  display: none;
+  margin: 14px 0 0;
+  padding: 10px;
+  border-radius: 9px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.push-mensaje.success {
+  display: block;
+  background: #ecfdf5;
+  color: #166534;
+}
+
+.push-mensaje.error {
+  display: block;
+  background: #fef2f2;
+  color: #991b1b;
+}
