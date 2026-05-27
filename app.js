@@ -53,11 +53,33 @@ window.login = login;
 // =====================
 // AUTO LOGIN
 // =====================
-window.addEventListener('load', () => {
-  if(localStorage.getItem("login") === "true") {
-    document.getElementById('loginScreen').style.display = "none";
-    document.getElementById('dashboard').style.display = "flex";
+window.addEventListener('load', async () => {
+
+  if (localStorage.getItem("login") === "true") {
+
+    const loginScreen = document.getElementById('loginScreen');
+    const dashboard = document.getElementById('dashboard');
+
+    if (loginScreen) {
+      loginScreen.style.display = "none";
+    }
+
+    if (dashboard) {
+      dashboard.style.display = "flex";
+    }
+
+    // 🔔 Revisar notificaciones únicamente después de entrar al dashboard
+    try {
+      if (typeof mostrarModalPushSiCorresponde === 'function') {
+        setTimeout(() => {
+          mostrarModalPushSiCorresponde();
+        }, 700);
+      }
+    } catch (error) {
+      console.error("❌ ERROR INICIANDO PUSH:", error);
+    }
   }
+
 });
 
 
