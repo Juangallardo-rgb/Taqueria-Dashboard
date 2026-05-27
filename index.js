@@ -295,12 +295,119 @@ app.get('/woo-orders', async (req, res) => {
   }
 });
 
+// ======================================================
+// 🔔 ENVIAR PUSH DE NUEVO PEDIDO AL RESTAURANTE
+// ======================================================
+async function enviarPushNuevoPedido(restauranteId, order) {
+
+  const result = await pool.query(
+    `SELECT id, endpoint, p256dh, auth
+     FROM push_subscriptions
+     WHERE restaurante_id = $1
+     AND activo = true`,
+    [restauranteId]
+  );
+
+  if (!result.rows.length) {
+    console.log("🔕 No hay dispositivos push activos para restaurante:", restauranteId);
+
+    return {
+      enviados: 0,
+      desactivados: 0,
+      sinDispositivos: true
+    };
+  }
+
+  const esPickup = (order.shipping_lines || []).some(
+    line => line.method_id === 'local_pickup'
+  );
+
+  const tipoPedido = esPickup ? 'Pickup' : 'Delivery';
+
+  const payload = JSON.stringify({
+    title: '🔔 Nuevo pedido recibido',
+    body: `Pedido #${order.id} • ${tipoPedido} • Total $${Number(order.total || 0).toFixed(2)}`,
+    url: '/',
+    orderId: order.id,
+    tag: `pedido-${order.id}`
+  });
+
+  let enviados = 0;
+  let desactivados = 0;
+  let erroresTemporales = 0;
+
+  for (const dispositivo of result.rows) {
+
+    const subscription = {
+      endpoint: dispositivo.endpoint,
+      keys: {
+        p256dh: dispositivo.p256dh,
+        auth: dispositivo.auth
+      }
+    };
+
+    try {
+
+      await webpush.sendNotification(subscription, payload);
+
+      enviados++;
+
+    } catch (error) {
+
+      const statusCode = error.statusCode || null;
+
+      console.error("❌ ERROR PUSH DISPOSITIVO:", {
+        subscription_id: dispositivo.id,
+        statusCode,
+        message: error.message
+      });
+
+      // Suscripción vencida, eliminada o revocada por el dispositivo
+      if (statusCode === 404 || statusCode === 410) {
+
+        await pool.query(
+          `UPDATE push_subscriptions
+           SET activo = false,
+               updated_at = NOW()
+           WHERE id = $1`,
+          [dispositivo.id]
+        );
+
+        desactivados++;
+
+      } else {
+
+        erroresTemporales++;
+      }
+    }
+  }
+
+  if (enviados === 0 && erroresTemporales > 0) {
+    throw new Error('No se pudo enviar la notificación push por un error temporal');
+  }
+
+  return {
+    enviados,
+    desactivados,
+    sinDispositivos: false
+  };
+}
+
 // ===============================
 // 🔥 WEBHOOK WOO (CORREGIDO)
 // ===============================
 app.post('/webhook-order', async (req, res) => {
 
   const order = req.body;
+  const restauranteId = 1;
+
+  if (!order || !order.id) {
+    console.log("⚠️ WOO WEBHOOK recibido sin order.id");
+    return res.status(400).json({
+      success: false,
+      message: "Orden inválida"
+    });
+  }
 
   console.log("🔥 WOO WEBHOOK:", order.id);
 
@@ -319,36 +426,124 @@ app.post('/webhook-order', async (req, res) => {
       };
     });
 
+    // ======================================================
+    // ✅ GUARDAR ORDEN COMO YA FUNCIONA ACTUALMENTE
+    // No se toca items ni refund_items
+    // ======================================================
     await pool.query(
-  `INSERT INTO pedidos 
-   (restaurante_id, total, estado, woo_order_id, customer_name, customer_phone, items, refund_items)
-   VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-   ON CONFLICT (woo_order_id)
-   DO UPDATE SET
-     estado = EXCLUDED.estado,
-     total = EXCLUDED.total,
-     customer_name = EXCLUDED.customer_name,
-     customer_phone = EXCLUDED.customer_phone,
-     items = EXCLUDED.items,
-     refund_items = EXCLUDED.refund_items`,
-  [
-    1,
-    order.total,
-    order.status,
-    order.id,
-    `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
-    order.billing?.phone || '',
-    JSON.stringify(items),
-    JSON.stringify(order.line_items || [])
-  ]
-);
+      `INSERT INTO pedidos 
+       (
+         restaurante_id,
+         total,
+         estado,
+         woo_order_id,
+         customer_name,
+         customer_phone,
+         items,
+         refund_items
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT (woo_order_id)
+       DO UPDATE SET
+         estado = EXCLUDED.estado,
+         total = EXCLUDED.total,
+         customer_name = EXCLUDED.customer_name,
+         customer_phone = EXCLUDED.customer_phone,
+         items = EXCLUDED.items,
+         refund_items = EXCLUDED.refund_items`,
+      [
+        restauranteId,
+        order.total,
+        order.status,
+        order.id,
+        `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
+        order.billing?.phone || '',
+        JSON.stringify(items),
+        JSON.stringify(order.line_items || [])
+      ]
+    );
 
-    console.log("✅ WOO GUARDADO CON ITEMS");
+    console.log("✅ WOO GUARDADO CON ITEMS:", order.id);
+
+    // ======================================================
+    // 🔔 RESERVAR NOTIFICACIÓN SOLO UNA VEZ POR ORDEN
+    // Si la orden ya notificó, este UPDATE no devuelve filas.
+    // ======================================================
+    const pushClaim = await pool.query(
+      `UPDATE pedidos
+       SET push_notified = TRUE,
+           push_notified_at = NOW(),
+           push_notification_error = NULL
+       WHERE woo_order_id = $1
+       AND restaurante_id = $2
+       AND COALESCE(push_notified, FALSE) = FALSE
+       RETURNING id`,
+      [
+        String(order.id),
+        restauranteId
+      ]
+    );
+
+    if (!pushClaim.rows.length) {
+      console.log("🔕 PUSH OMITIDO: orden ya notificada:", order.id);
+      return res.sendStatus(200);
+    }
+
+    // ======================================================
+    // 🔔 ENVIAR NOTIFICACIÓN PUSH
+    // Si falla, la orden sigue guardada correctamente.
+    // ======================================================
+    try {
+
+      const resultadoPush = await enviarPushNuevoPedido(restauranteId, order);
+
+      console.log("✅ PUSH NUEVO PEDIDO:", {
+        order_id: order.id,
+        enviados: resultadoPush.enviados,
+        desactivados: resultadoPush.desactivados,
+        sinDispositivos: resultadoPush.sinDispositivos
+      });
+
+      if (resultadoPush.sinDispositivos) {
+        await pool.query(
+          `UPDATE pedidos
+           SET push_notification_error = $1
+           WHERE woo_order_id = $2
+           AND restaurante_id = $3`,
+          [
+            'No había dispositivos activos suscritos',
+            String(order.id),
+            restauranteId
+          ]
+        );
+      }
+
+    } catch (pushError) {
+
+      console.error("❌ ERROR PUSH NUEVO PEDIDO:", pushError.message);
+
+      // Dejamos la orden disponible para reintento si Woo vuelve a enviar actualización.
+      await pool.query(
+        `UPDATE pedidos
+         SET push_notified = FALSE,
+             push_notified_at = NULL,
+             push_notification_error = $1
+         WHERE woo_order_id = $2
+         AND restaurante_id = $3`,
+        [
+          pushError.message,
+          String(order.id),
+          restauranteId
+        ]
+      );
+    }
 
     res.sendStatus(200);
 
   } catch (error) {
-    console.error("❌ ERROR WOO:", error);
+
+    console.error("❌ ERROR WOO GUARDANDO ORDEN:", error);
+
     res.sendStatus(500);
   }
 
