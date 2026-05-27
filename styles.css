@@ -1018,3 +1018,49 @@ body {
   background: #fef2f2;
   color: #991b1b;
 }
+
+/* ====================================================== */
+/* CERRAR SESIÓN VISIBLE EN MENÚ MOBILE                   */
+/* ====================================================== */
+
+.btn-logout {
+  margin-top: auto;
+  width: calc(100% - 28px);
+  margin-left: 14px;
+  margin-right: 14px;
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  background: #f97316;
+  color: #ffffff;
+  border: none;
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: block;
+}
+
+.btn-logout:hover {
+  background: #ea580c;
+}
+
+@media (max-width: 768px) {
+
+  /* Cambia .sidebar por la clase real de tu menú lateral si tiene otro nombre */
+  .sidebar {
+    height: 100dvh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    padding-bottom: 10px;
+  }
+
+  .btn-logout {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    margin-top: auto;
+    flex-shrink: 0;
+  }
+}
