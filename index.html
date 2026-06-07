@@ -147,7 +147,9 @@
     </div>
 
     <!-- LOGOUT -->
-    <button class="logout" onclick="logout()">Cerrar sesión</button>
+    <button class="btn-logout" onclick="logout()">
+  Cerrar sesión
+</button>
 
   </div>
 
@@ -280,6 +282,35 @@
   </div>
 
 </div>
+
+  </div>
+
+</div>
+<!-- ====================================================== -->
+<!-- 🔔 MODAL ACTIVAR NOTIFICACIONES PUSH                  -->
+<!-- ====================================================== -->
+<div id="pushPermissionModal" class="push-overlay">
+
+  <div class="push-box">
+
+    <div class="push-icon">🔔</div>
+
+    <h2>No pierdas ningún pedido</h2>
+
+    <p class="push-text">
+      Activa las notificaciones para recibir alertas inmediatas cuando llegue
+      una nueva orden, incluso si DENIX está cerrado o tu pantalla está apagada.
+    </p>
+
+    <button id="btnActivarPush" class="btn-push-activar" onclick="activarNotificacionesPush()">
+      Activar notificaciones
+    </button>
+
+    <button class="btn-push-despues" onclick="cerrarModalPush()">
+      Ahora no
+    </button>
+
+    <p id="pushMensaje" class="push-mensaje"></p>
 
   </div>
 

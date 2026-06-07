@@ -22,42 +22,131 @@ document.addEventListener('click', () => {
 // LOGIN
 // =====================
 async function login() {
+
+  const emailInput = document.getElementById('email');
+  const passwordInput = document.getElementById('password');
+  const boton = document.getElementById('btnLogin');
+  const botonTexto = document.getElementById('loginButtonText');
+  const mensaje = document.getElementById('loginMessage');
+
+  const email = emailInput.value.trim();
+  const password = passwordInput.value;
+
+  mensaje.className = 'login-message';
+  mensaje.textContent = '';
+
+  if (!email || !password) {
+    mensaje.textContent = 'Completa tu correo y contraseña.';
+    mensaje.classList.add('error');
+    return;
+  }
+
   try {
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
+
+    boton.disabled = true;
+    boton.classList.add('loading');
+    botonTexto.textContent = 'Ingresando...';
 
     const res = await fetch('/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        email,
+        password
+      })
     });
 
     const data = await res.json();
 
-    if (data.success) {
-      localStorage.setItem("login", "true");
-      location.reload();
-    } else {
-      alert("Credenciales incorrectas");
+    if (!res.ok || !data.success) {
+      throw new Error(
+        data.message || 'Correo o contraseña incorrectos.'
+      );
     }
 
+    mensaje.textContent = 'Acceso correcto. Abriendo tu panel...';
+    mensaje.classList.add('success');
+
+    localStorage.setItem('login', 'true');
+
+    setTimeout(() => {
+      location.reload();
+    }, 550);
+
   } catch (error) {
-    console.error("ERROR LOGIN:", error);
+
+    console.error('ERROR LOGIN:', error);
+
+    mensaje.textContent =
+      error.message || 'No se pudo iniciar sesión. Intenta nuevamente.';
+
+    mensaje.classList.add('error');
+
+  } finally {
+
+    boton.disabled = false;
+    boton.classList.remove('loading');
+    botonTexto.textContent = 'Ingresar al panel';
   }
 }
 
-// hacer login global
 window.login = login;
+
+// =====================
+// MOSTRAR / OCULTAR CONTRASEÑA
+// =====================
+function togglePassword() {
+
+  const passwordInput = document.getElementById('password');
+  const boton = document.getElementById('btnMostrarPassword');
+
+  if (!passwordInput || !boton) return;
+
+  const mostrar = passwordInput.type === 'password';
+
+  passwordInput.type = mostrar ? 'text' : 'password';
+  boton.textContent = mostrar ? '🙈' : '👁️';
+  boton.setAttribute(
+    'aria-label',
+    mostrar ? 'Ocultar contraseña' : 'Mostrar contraseña'
+  );
+}
+
+window.togglePassword = togglePassword;
 
 
 // =====================
 // AUTO LOGIN
 // =====================
-window.addEventListener('load', () => {
-  if(localStorage.getItem("login") === "true") {
-    document.getElementById('loginScreen').style.display = "none";
-    document.getElementById('dashboard').style.display = "flex";
+window.addEventListener('load', async () => {
+
+  if (localStorage.getItem("login") === "true") {
+
+    const loginScreen = document.getElementById('loginScreen');
+    const dashboard = document.getElementById('dashboard');
+
+    if (loginScreen) {
+      loginScreen.style.display = "none";
+    }
+
+    if (dashboard) {
+      dashboard.style.display = "flex";
+    }
+
+    // 🔔 Revisar notificaciones únicamente después de entrar al dashboard
+    try {
+      if (typeof mostrarModalPushSiCorresponde === 'function') {
+        setTimeout(() => {
+          mostrarModalPushSiCorresponde();
+        }, 700);
+      }
+    } catch (error) {
+      console.error("❌ ERROR INICIANDO PUSH:", error);
+    }
   }
+
 });
 
 
@@ -1335,6 +1424,269 @@ window.onclick = function(e) {
   if (e.target === modal) {
     cerrarRefund();
   }
+};
+
+
+// ======================================================
+// 🔔 PUSH NOTIFICATIONS - SUSCRIPCIÓN DEL DISPOSITIVO
+// ======================================================
+
+function convertirVapidKey(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+
+  const base64 = (base64String + padding)
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; i++) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+
+  return outputArray;
+}
+
+
+function mostrarMensajePush(mensaje, tipo = '') {
+  const mensajeBox = document.getElementById('pushMensaje');
+
+  if (!mensajeBox) return;
+
+  mensajeBox.className = 'push-mensaje';
+
+  if (!mensaje) {
+    mensajeBox.innerText = '';
+    return;
+  }
+
+  mensajeBox.innerText = mensaje;
+
+  if (tipo) {
+    mensajeBox.classList.add(tipo);
+  }
+}
+
+
+async function guardarSuscripcionPush(subscription) {
+
+  const subscriptionJSON = subscription.toJSON
+    ? subscription.toJSON()
+    : subscription;
+
+  const res = await fetch('/push-subscribe', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(subscriptionJSON)
+  });
+
+  const data = await res.json();
+
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || 'No se pudo guardar la suscripción');
+  }
+
+  return data;
+}
+
+
+async function crearSuscripcionPush() {
+
+  const keyRes = await fetch('/push-public-key');
+
+  const keyData = await keyRes.json();
+
+  if (!keyRes.ok || !keyData.success || !keyData.publicKey) {
+    throw new Error('No se pudo obtener la clave de notificaciones');
+  }
+
+  const registration = await navigator.serviceWorker.ready;
+
+  let subscription = await registration.pushManager.getSubscription();
+
+  if (!subscription) {
+    subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: convertirVapidKey(keyData.publicKey)
+    });
+  }
+
+  await guardarSuscripcionPush(subscription);
+
+  return subscription;
+}
+
+
+// ======================================================
+// 🔔 ABRIR MODAL SOLO SI HACE FALTA
+// ======================================================
+
+window.mostrarModalPushSiCorresponde = async function() {
+
+  const modal = document.getElementById('pushPermissionModal');
+
+  if (!modal) return;
+
+  if (
+    !('serviceWorker' in navigator) ||
+    !('PushManager' in window) ||
+    !('Notification' in window)
+  ) {
+    console.log('⚠️ Este dispositivo no soporta notificaciones push web');
+    return;
+  }
+
+  try {
+
+    const registration = await navigator.serviceWorker.ready;
+    const subscriptionExistente = await registration.pushManager.getSubscription();
+
+    // ✅ Ya está suscrito: asegurar que esté guardado en DB y no mostrar modal
+    if (subscriptionExistente) {
+      await guardarSuscripcionPush(subscriptionExistente);
+      modal.classList.remove('active');
+      localStorage.removeItem('denix_push_modal_cerrado');
+      console.log('🔔 Dispositivo ya suscrito a notificaciones');
+      return;
+    }
+
+    // ❌ El usuario bloqueó permisos en el dispositivo
+    if (Notification.permission === 'denied') {
+      modal.classList.remove('active');
+      console.log('🔕 Notificaciones bloqueadas por el usuario');
+      return;
+    }
+
+    // ✅ Ya concedió permiso anteriormente, pero falta recrear suscripción
+    if (Notification.permission === 'granted') {
+      try {
+        await crearSuscripcionPush();
+        modal.classList.remove('active');
+        console.log('🔔 Suscripción push restaurada correctamente');
+        return;
+      } catch (error) {
+        console.error('❌ No se pudo restaurar la suscripción push:', error);
+      }
+    }
+
+    // Si presionó "Ahora no", no volvemos a mostrarlo en este dispositivo
+    const modalCerrado = localStorage.getItem('denix_push_modal_cerrado');
+
+    if (modalCerrado === 'true') {
+      return;
+    }
+
+    mostrarMensajePush('');
+    modal.classList.add('active');
+
+  } catch (error) {
+    console.error('❌ ERROR REVISANDO PUSH:', error);
+  }
+};
+
+
+// ======================================================
+// 🔔 BOTÓN ACTIVAR NOTIFICACIONES
+// ======================================================
+
+window.activarNotificacionesPush = async function() {
+
+  const modal = document.getElementById('pushPermissionModal');
+  const boton = document.getElementById('btnActivarPush');
+
+  if (
+    !('serviceWorker' in navigator) ||
+    !('PushManager' in window) ||
+    !('Notification' in window)
+  ) {
+    mostrarMensajePush(
+      'Este dispositivo no es compatible con notificaciones push.',
+      'error'
+    );
+    return;
+  }
+
+  try {
+
+    if (boton) {
+      boton.disabled = true;
+      boton.innerText = 'Activando...';
+    }
+
+    mostrarMensajePush('');
+
+    const permission = await Notification.requestPermission();
+
+    if (permission !== 'granted') {
+
+      if (permission === 'denied') {
+        mostrarMensajePush(
+          'Las notificaciones fueron bloqueadas. Actívalas desde la configuración de tu dispositivo.',
+          'error'
+        );
+      } else {
+        mostrarMensajePush(
+          'No se activaron las notificaciones. Puedes intentarlo más tarde.',
+          'error'
+        );
+      }
+
+      return;
+    }
+
+    await crearSuscripcionPush();
+
+    localStorage.removeItem('denix_push_modal_cerrado');
+
+    mostrarMensajePush(
+      '✅ Notificaciones activadas. Recibirás alertas de nuevos pedidos.',
+      'success'
+    );
+
+    console.log('✅ PUSH ACTIVADO CORRECTAMENTE');
+
+    setTimeout(() => {
+      if (modal) {
+        modal.classList.remove('active');
+      }
+    }, 1400);
+
+  } catch (error) {
+    console.error('❌ ERROR ACTIVANDO PUSH:', error);
+
+    mostrarMensajePush(
+      'No se pudieron activar las notificaciones. Intenta nuevamente.',
+      'error'
+    );
+
+  } finally {
+
+    if (boton) {
+      boton.disabled = false;
+      boton.innerText = 'Activar notificaciones';
+    }
+  }
+};
+
+
+// ======================================================
+// 🔕 BOTÓN "AHORA NO"
+// ======================================================
+
+window.cerrarModalPush = function() {
+
+  const modal = document.getElementById('pushPermissionModal');
+
+  if (modal) {
+    modal.classList.remove('active');
+  }
+
+  localStorage.setItem('denix_push_modal_cerrado', 'true');
+
+  mostrarMensajePush('');
 };
 // =====================
 // INIT
