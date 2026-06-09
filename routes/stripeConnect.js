@@ -7,6 +7,8 @@ const pool = require("../database");
 const STRIPE_CLIENT_ID = process.env.STRIPE_CONNECT_CLIENT_ID;
 const STRIPE_REDIRECT_URI = process.env.STRIPE_CONNECT_REDIRECT_URI;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+const Stripe = require("stripe");
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 /**
  * Inicia la conexión de un restaurante con su cuenta Stripe existente.
@@ -387,6 +389,119 @@ router.get("/status/:restauranteId", async (req, res) => {
     return res.status(500).json({
       success: false,
       error: "No se pudo verificar la cuenta Stripe conectada",
+    });
+  }
+});
+
+/**
+ * Pago de prueba con Direct Charge.
+ *
+ * POST /api/stripe/connect/test-payment/1
+ */
+router.post("/test-payment/:restauranteId", async (req, res) => {
+  try {
+    const restauranteId = Number(req.params.restauranteId);
+
+    if (!Number.isInteger(restauranteId) || restauranteId <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: "restauranteId inválido",
+      });
+    }
+
+    const restauranteResult = await pool.query(
+      `
+      SELECT
+        id,
+        nombre,
+        stripe_account_id,
+        stripe_connect_status,
+        stripe_livemode
+      FROM restaurantes
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [restauranteId]
+    );
+
+    if (restauranteResult.rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "Restaurante no encontrado",
+      });
+    }
+
+    const restaurante = restauranteResult.rows[0];
+
+    if (!restaurante.stripe_account_id) {
+      return res.status(400).json({
+        success: false,
+        error: "El restaurante no tiene Stripe conectado",
+      });
+    }
+
+    if (restaurante.stripe_livemode === true) {
+      return res.status(400).json({
+        success: false,
+        error: "Esta ruta solo puede usarse en modo de prueba",
+      });
+    }
+
+    /*
+     * Prueba:
+     * Cliente paga $20.00
+     * Denix recibe $2.50
+     * Restaurante recibe el resto menos el fee real de Stripe.
+     */
+    const paymentIntent = await stripe.paymentIntents.create(
+      {
+        amount: 2000,
+        currency: "usd",
+
+        payment_method: "pm_card_visa",
+        payment_method_types: ["card"],
+        confirm: true,
+
+        application_fee_amount: 250,
+
+        description: "Prueba Stripe Connect Denix - Pickup",
+
+        metadata: {
+          restaurante_id: String(restaurante.id),
+          restaurante_nombre: restaurante.nombre,
+          order_type: "pickup",
+          denix_fee_cents: "250",
+          source: "denix_connect_test",
+        },
+      },
+      {
+        stripeAccount: restaurante.stripe_account_id,
+      }
+    );
+
+    return res.json({
+      success: true,
+      message: "Pago directo de prueba realizado correctamente",
+      payment: {
+        payment_intent_id: paymentIntent.id,
+        status: paymentIntent.status,
+        amount: paymentIntent.amount,
+        currency: paymentIntent.currency,
+        application_fee_amount:
+          paymentIntent.application_fee_amount,
+        connected_account:
+          restaurante.stripe_account_id,
+      },
+    });
+  } catch (error) {
+    console.error("Error en pago Direct Charge de prueba:", error);
+
+    return res.status(500).json({
+      success: false,
+      error:
+        error?.raw?.message ||
+        error.message ||
+        "No se pudo realizar el pago de prueba",
     });
   }
 });
