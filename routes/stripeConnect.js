@@ -264,4 +264,131 @@ router.get("/callback", async (req, res) => {
   }
 });
 
+
+/**
+ * Consulta y verifica una cuenta Stripe conectada.
+ *
+ * Ejemplo:
+ * GET /api/stripe/connect/status/1
+ */
+router.get("/status/:restauranteId", async (req, res) => {
+  try {
+    const restauranteId = Number(req.params.restauranteId);
+
+    if (!Number.isInteger(restauranteId) || restauranteId <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: "restauranteId inválido",
+      });
+    }
+
+    const restauranteResult = await pool.query(
+      `
+      SELECT
+        id,
+        nombre,
+        stripe_account_id,
+        stripe_connect_status,
+        stripe_livemode
+      FROM restaurantes
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [restauranteId]
+    );
+
+    if (restauranteResult.rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "Restaurante no encontrado",
+      });
+    }
+
+    const restaurante = restauranteResult.rows[0];
+
+    if (!restaurante.stripe_account_id) {
+      return res.status(400).json({
+        success: false,
+        error: "El restaurante todavía no tiene una cuenta Stripe conectada",
+      });
+    }
+
+    const stripeResponse = await fetch(
+      `https://api.stripe.com/v1/accounts/${encodeURIComponent(
+        restaurante.stripe_account_id
+      )}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
+        },
+      }
+    );
+
+    const stripeAccount = await stripeResponse.json();
+
+    if (!stripeResponse.ok) {
+      console.error("Stripe account retrieve error:", stripeAccount);
+
+      return res.status(502).json({
+        success: false,
+        error:
+          stripeAccount?.error?.message ||
+          "No se pudo consultar la cuenta conectada en Stripe",
+      });
+    }
+
+    const isReady =
+      stripeAccount.charges_enabled === true &&
+      stripeAccount.payouts_enabled === true &&
+      stripeAccount.details_submitted === true;
+
+    await pool.query(
+      `
+      UPDATE restaurantes
+      SET
+        stripe_connect_status = $1
+      WHERE id = $2
+      `,
+      [isReady ? "active" : "connected_pending", restauranteId]
+    );
+
+    return res.json({
+      success: true,
+      restaurante: {
+        id: restaurante.id,
+        nombre: restaurante.nombre,
+      },
+      stripe: {
+        account_id: stripeAccount.id,
+        type: stripeAccount.type,
+        country: stripeAccount.country,
+        default_currency: stripeAccount.default_currency,
+        charges_enabled: stripeAccount.charges_enabled,
+        payouts_enabled: stripeAccount.payouts_enabled,
+        details_submitted: stripeAccount.details_submitted,
+        livemode: Boolean(stripeAccount.livemode),
+        ready_for_payments: isReady,
+        requirements: {
+          currently_due:
+            stripeAccount.requirements?.currently_due || [],
+          eventually_due:
+            stripeAccount.requirements?.eventually_due || [],
+          past_due:
+            stripeAccount.requirements?.past_due || [],
+          disabled_reason:
+            stripeAccount.requirements?.disabled_reason || null,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Error consultando Stripe Connect:", error);
+
+    return res.status(500).json({
+      success: false,
+      error: "No se pudo verificar la cuenta Stripe conectada",
+    });
+  }
+});
+
 module.exports = router;
