@@ -11,11 +11,15 @@ const cors = require('cors');
 const path = require('path');
 const webpush = require('web-push');
 
+const stripeConnectRoutes = require('./routes/stripeConnect');
+
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.use('/api/stripe/connect', stripeConnectRoutes);
 
 const PORT = process.env.PORT || 4000;
 // 🔐 CLAVES DESDE VARIABLES DE ENTORNO
