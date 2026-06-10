@@ -506,4 +506,161 @@ router.post("/test-payment/:restauranteId", async (req, res) => {
   }
 });
 
+/**
+ * Crear PaymentIntent para WooCommerce usando Direct Charge.
+ *
+ * POST /api/stripe/connect/create-payment-intent
+ */
+router.post("/create-payment-intent", async (req, res) => {
+  try {
+    const secretHeader = req.headers["x-denix-secret"];
+
+    if (
+      !process.env.DENIX_WOO_PAYMENT_SECRET ||
+      secretHeader !== process.env.DENIX_WOO_PAYMENT_SECRET
+    ) {
+      return res.status(401).json({
+        success: false,
+        error: "No autorizado",
+      });
+    }
+
+    const {
+      restauranteId,
+      wooOrderId,
+      amountCents,
+      currency,
+      orderType,
+      customerEmail,
+    } = req.body;
+
+    const parsedRestauranteId = Number(restauranteId);
+    const parsedWooOrderId = String(wooOrderId || "").trim();
+    const parsedAmountCents = Number(amountCents);
+    const parsedCurrency = String(currency || "usd").toLowerCase();
+    const parsedOrderType = String(orderType || "pickup").toLowerCase();
+
+    if (!Number.isInteger(parsedRestauranteId) || parsedRestauranteId <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: "restauranteId inválido",
+      });
+    }
+
+    if (!parsedWooOrderId) {
+      return res.status(400).json({
+        success: false,
+        error: "wooOrderId requerido",
+      });
+    }
+
+    if (!Number.isInteger(parsedAmountCents) || parsedAmountCents <= 50) {
+      return res.status(400).json({
+        success: false,
+        error: "amountCents inválido",
+      });
+    }
+
+    if (parsedOrderType !== "pickup" && parsedOrderType !== "delivery") {
+      return res.status(400).json({
+        success: false,
+        error: "orderType inválido",
+      });
+    }
+
+    const restauranteResult = await pool.query(
+      `
+      SELECT
+        id,
+        nombre,
+        stripe_account_id,
+        stripe_connect_status,
+        stripe_livemode
+      FROM restaurantes
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [parsedRestauranteId]
+    );
+
+    if (restauranteResult.rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "Restaurante no encontrado",
+      });
+    }
+
+    const restaurante = restauranteResult.rows[0];
+
+    if (!restaurante.stripe_account_id) {
+      return res.status(400).json({
+        success: false,
+        error: "El restaurante no tiene Stripe conectado",
+      });
+    }
+
+    /**
+     * Regla final Denix:
+     * Pickup: $2.98
+     * Delivery: $2.98 + $9.88 = $12.86
+     */
+    const applicationFeeCents =
+      parsedOrderType === "delivery" ? 1286 : 298;
+
+    if (parsedAmountCents <= applicationFeeCents) {
+      return res.status(400).json({
+        success: false,
+        error: "El total de la orden no puede ser menor o igual al fee de Denix",
+      });
+    }
+
+    const paymentIntent = await stripe.paymentIntents.create(
+      {
+        amount: parsedAmountCents,
+        currency: parsedCurrency,
+
+        automatic_payment_methods: {
+          enabled: true,
+        },
+
+        application_fee_amount: applicationFeeCents,
+
+        receipt_email: customerEmail || undefined,
+
+        description: `WooCommerce Order #${parsedWooOrderId}`,
+
+        metadata: {
+          woo_order_id: parsedWooOrderId,
+          restaurante_id: String(restaurante.id),
+          restaurante_nombre: restaurante.nombre,
+          order_type: parsedOrderType,
+          denix_application_fee_cents: String(applicationFeeCents),
+          source: "denix_woocommerce_embedded_checkout",
+        },
+      },
+      {
+        stripeAccount: restaurante.stripe_account_id,
+      }
+    );
+
+    return res.json({
+      success: true,
+      clientSecret: paymentIntent.client_secret,
+      paymentIntentId: paymentIntent.id,
+      connectedAccount: restaurante.stripe_account_id,
+      applicationFeeAmount: applicationFeeCents,
+    });
+  } catch (error) {
+    console.error("Error creando PaymentIntent WooCommerce:", error);
+
+    return res.status(500).json({
+      success: false,
+      error:
+        error?.raw?.message ||
+        error.message ||
+        "No se pudo crear el PaymentIntent",
+    });
+  }
+});
+
 module.exports = router;
