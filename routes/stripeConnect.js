@@ -462,7 +462,7 @@ router.post("/test-payment/:restauranteId", async (req, res) => {
         payment_method_types: ["card"],
         confirm: true,
 
-        application_fee_amount: 250,
+        application_fee_amount: 298,
 
         description: "Prueba Stripe Connect Denix - Pickup",
 
@@ -470,7 +470,7 @@ router.post("/test-payment/:restauranteId", async (req, res) => {
           restaurante_id: String(restaurante.id),
           restaurante_nombre: restaurante.nombre,
           order_type: "pickup",
-          denix_fee_cents: "250",
+          denix_fee_cents: "298",
           source: "denix_connect_test",
         },
       },
