@@ -532,6 +532,8 @@ router.post("/create-payment-intent", async (req, res) => {
       currency,
       orderType,
       customerEmail,
+      paymentMethodId,
+      confirmPayment,
     } = req.body;
 
     const parsedRestauranteId = Number(restauranteId);
@@ -613,15 +615,18 @@ router.post("/create-payment-intent", async (req, res) => {
         error: "El total de la orden no puede ser menor o igual al fee de Denix",
       });
     }
+      const parsedPaymentMethodId = String(paymentMethodId || "").trim();
+        const shouldConfirmPayment = confirmPayment === true;
 
-    const paymentIntent = await stripe.paymentIntents.create(
-      {
+        if (shouldConfirmPayment && !parsedPaymentMethodId.startsWith("pm_")) {
+          return res.status(400).json({
+            success: false,
+            error: "paymentMethodId requerido para confirmar el pago",
+          });
+        }
+        const paymentIntentPayload = {
         amount: parsedAmountCents,
         currency: parsedCurrency,
-
-        automatic_payment_methods: {
-          enabled: true,
-        },
 
         application_fee_amount: applicationFeeCents,
 
@@ -637,19 +642,35 @@ router.post("/create-payment-intent", async (req, res) => {
           denix_application_fee_cents: String(applicationFeeCents),
           source: "denix_woocommerce_embedded_checkout",
         },
-      },
-      {
-        stripeAccount: restaurante.stripe_account_id,
-      }
-    );
+      };
 
-    return res.json({
-      success: true,
-      clientSecret: paymentIntent.client_secret,
-      paymentIntentId: paymentIntent.id,
-      connectedAccount: restaurante.stripe_account_id,
-      applicationFeeAmount: applicationFeeCents,
-    });
+      if (shouldConfirmPayment) {
+        paymentIntentPayload.payment_method = parsedPaymentMethodId;
+        paymentIntentPayload.confirm = true;
+        paymentIntentPayload.confirmation_method = "automatic";
+        paymentIntentPayload.payment_method_types = ["card"];
+      } else {
+        paymentIntentPayload.automatic_payment_methods = {
+          enabled: true,
+        };
+      }
+
+      const paymentIntent = await stripe.paymentIntents.create(
+        paymentIntentPayload,
+        {
+          stripeAccount: restaurante.stripe_account_id,
+        }
+      );
+
+      return res.json({
+        success: true,
+        clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id,
+        status: paymentIntent.status,
+        connectedAccount: restaurante.stripe_account_id,
+        applicationFeeAmount: applicationFeeCents,
+        nextAction: paymentIntent.next_action || null,
+      });
   } catch (error) {
     console.error("Error creando PaymentIntent WooCommerce:", error);
 
