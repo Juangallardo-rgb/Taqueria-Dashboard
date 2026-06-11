@@ -84,7 +84,7 @@ router.get("/authorize/:restauranteId", async (req, res) => {
         expires_at,
         used
       )
-      VALUES ($1, $2, NOW() + INTERVAL '15 minutes', false)
+      VALUES ($1, $2, NOW() + INTERVAL '2 hours', false)
       `,
       [state, restauranteId]
     );
