@@ -1,19 +1,42 @@
 const express = require("express");
 const crypto = require("crypto");
-const router = express.Router();
+const Stripe = require("stripe");
 
+const router = express.Router();
 const pool = require("../database");
 
 const STRIPE_CLIENT_ID = process.env.STRIPE_CONNECT_CLIENT_ID;
 const STRIPE_REDIRECT_URI = process.env.STRIPE_CONNECT_REDIRECT_URI;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
-const Stripe = require("stripe");
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+const stripe = new Stripe(STRIPE_SECRET_KEY);
+
+/**
+ * Fees finales Denix:
+ * Pickup: $2.98
+ * Delivery: $2.98 + $9.88 = $12.86
+ */
+const DENIX_PICKUP_FEE_CENTS = 298;
+const DENIX_DELIVERY_FEE_CENTS = 1286;
+
+function getDenixApplicationFeeCents(orderType) {
+  return orderType === "delivery"
+    ? DENIX_DELIVERY_FEE_CENTS
+    : DENIX_PICKUP_FEE_CENTS;
+}
+
+function validateDenixSecret(req) {
+  const secretHeader = req.headers["x-denix-secret"];
+
+  return (
+    process.env.DENIX_WOO_PAYMENT_SECRET &&
+    secretHeader === process.env.DENIX_WOO_PAYMENT_SECRET
+  );
+}
 
 /**
  * Inicia la conexión de un restaurante con su cuenta Stripe existente.
  *
- * Ejemplo:
  * GET /api/stripe/connect/authorize/1
  */
 router.get("/authorize/:restauranteId", async (req, res) => {
@@ -27,7 +50,7 @@ router.get("/authorize/:restauranteId", async (req, res) => {
       });
     }
 
-    if (!STRIPE_CLIENT_ID || !STRIPE_REDIRECT_URI) {
+    if (!STRIPE_CLIENT_ID || !STRIPE_REDIRECT_URI || !STRIPE_SECRET_KEY) {
       return res.status(500).json({
         success: false,
         error: "Faltan variables de entorno de Stripe Connect",
@@ -90,12 +113,19 @@ router.get("/authorize/:restauranteId", async (req, res) => {
 
 /**
  * Stripe redirige aquí después de que el restaurante autoriza la conexión.
+ *
+ * GET /api/stripe/connect/callback
  */
 router.get("/callback", async (req, res) => {
   const client = await pool.connect();
 
   try {
-    const { code, state, error, error_description: errorDescription } = req.query;
+    const {
+      code,
+      state,
+      error,
+      error_description: errorDescription,
+    } = req.query;
 
     if (error) {
       console.error("Stripe OAuth rechazado:", {
@@ -266,11 +296,9 @@ router.get("/callback", async (req, res) => {
   }
 });
 
-
 /**
- * Consulta y verifica una cuenta Stripe conectada.
+ * Consultar estado de cuenta conectada.
  *
- * Ejemplo:
  * GET /api/stripe/connect/status/1
  */
 router.get("/status/:restauranteId", async (req, res) => {
@@ -315,30 +343,9 @@ router.get("/status/:restauranteId", async (req, res) => {
       });
     }
 
-    const stripeResponse = await fetch(
-      `https://api.stripe.com/v1/accounts/${encodeURIComponent(
-        restaurante.stripe_account_id
-      )}`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${STRIPE_SECRET_KEY}`,
-        },
-      }
+    const stripeAccount = await stripe.accounts.retrieve(
+      restaurante.stripe_account_id
     );
-
-    const stripeAccount = await stripeResponse.json();
-
-    if (!stripeResponse.ok) {
-      console.error("Stripe account retrieve error:", stripeAccount);
-
-      return res.status(502).json({
-        success: false,
-        error:
-          stripeAccount?.error?.message ||
-          "No se pudo consultar la cuenta conectada en Stripe",
-      });
-    }
 
     const isReady =
       stripeAccount.charges_enabled === true &&
@@ -348,8 +355,7 @@ router.get("/status/:restauranteId", async (req, res) => {
     await pool.query(
       `
       UPDATE restaurantes
-      SET
-        stripe_connect_status = $1
+      SET stripe_connect_status = $1
       WHERE id = $2
       `,
       [isReady ? "active" : "connected_pending", restauranteId]
@@ -388,15 +394,24 @@ router.get("/status/:restauranteId", async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      error: "No se pudo verificar la cuenta Stripe conectada",
+      error:
+        error?.raw?.message ||
+        error.message ||
+        "No se pudo verificar la cuenta Stripe conectada",
     });
   }
 });
 
 /**
- * Pago de prueba con Direct Charge.
+ * Pago temporal de prueba.
  *
  * POST /api/stripe/connect/test-payment/1
+ *
+ * Body opcional:
+ * {
+ *   "amountCents": 2000,
+ *   "orderType": "pickup"
+ * }
  */
 router.post("/test-payment/:restauranteId", async (req, res) => {
   try {
@@ -409,13 +424,34 @@ router.post("/test-payment/:restauranteId", async (req, res) => {
       });
     }
 
+    const {
+      amountCents = 2000,
+      orderType = "pickup",
+    } = req.body || {};
+
+    const parsedAmountCents = Number(amountCents);
+    const parsedOrderType = String(orderType).toLowerCase();
+
+    if (!Number.isInteger(parsedAmountCents) || parsedAmountCents <= 50) {
+      return res.status(400).json({
+        success: false,
+        error: "amountCents inválido",
+      });
+    }
+
+    if (parsedOrderType !== "pickup" && parsedOrderType !== "delivery") {
+      return res.status(400).json({
+        success: false,
+        error: "orderType debe ser pickup o delivery",
+      });
+    }
+
     const restauranteResult = await pool.query(
       `
       SELECT
         id,
         nombre,
         stripe_account_id,
-        stripe_connect_status,
         stripe_livemode
       FROM restaurantes
       WHERE id = $1
@@ -447,30 +483,37 @@ router.post("/test-payment/:restauranteId", async (req, res) => {
       });
     }
 
-    /*
-     * Prueba:
-     * Cliente paga $20.00
-     * Denix recibe $2.50
-     * Restaurante recibe el resto menos el fee real de Stripe.
-     */
+    const applicationFeeCents =
+      getDenixApplicationFeeCents(parsedOrderType);
+
+    if (parsedAmountCents <= applicationFeeCents) {
+      return res.status(400).json({
+        success: false,
+        error: "El total no puede ser menor o igual al fee de Denix",
+      });
+    }
+
     const paymentIntent = await stripe.paymentIntents.create(
       {
-        amount: 2000,
+        amount: parsedAmountCents,
         currency: "usd",
 
         payment_method: "pm_card_visa",
         payment_method_types: ["card"],
         confirm: true,
 
-        application_fee_amount: 298,
+        application_fee_amount: applicationFeeCents,
 
-        description: "Prueba Stripe Connect Denix - Pickup",
+        description:
+          parsedOrderType === "delivery"
+            ? "Prueba Stripe Connect Denix - Delivery"
+            : "Prueba Stripe Connect Denix - Pickup",
 
         metadata: {
           restaurante_id: String(restaurante.id),
           restaurante_nombre: restaurante.nombre,
-          order_type: "pickup",
-          denix_fee_cents: "298",
+          order_type: parsedOrderType,
+          denix_application_fee_cents: String(applicationFeeCents),
           source: "denix_connect_test",
         },
       },
@@ -487,10 +530,9 @@ router.post("/test-payment/:restauranteId", async (req, res) => {
         status: paymentIntent.status,
         amount: paymentIntent.amount,
         currency: paymentIntent.currency,
-        application_fee_amount:
-          paymentIntent.application_fee_amount,
-        connected_account:
-          restaurante.stripe_account_id,
+        application_fee_amount: paymentIntent.application_fee_amount,
+        connected_account: restaurante.stripe_account_id,
+        order_type: parsedOrderType,
       },
     });
   } catch (error) {
@@ -507,18 +549,13 @@ router.post("/test-payment/:restauranteId", async (req, res) => {
 });
 
 /**
- * Crear PaymentIntent para WooCommerce usando Direct Charge.
+ * Crear y/o confirmar PaymentIntent para WooCommerce.
  *
  * POST /api/stripe/connect/create-payment-intent
  */
 router.post("/create-payment-intent", async (req, res) => {
   try {
-    const secretHeader = req.headers["x-denix-secret"];
-
-    if (
-      !process.env.DENIX_WOO_PAYMENT_SECRET ||
-      secretHeader !== process.env.DENIX_WOO_PAYMENT_SECRET
-    ) {
+    if (!validateDenixSecret(req)) {
       return res.status(401).json({
         success: false,
         error: "No autorizado",
@@ -541,6 +578,8 @@ router.post("/create-payment-intent", async (req, res) => {
     const parsedAmountCents = Number(amountCents);
     const parsedCurrency = String(currency || "usd").toLowerCase();
     const parsedOrderType = String(orderType || "pickup").toLowerCase();
+    const parsedPaymentMethodId = String(paymentMethodId || "").trim();
+    const shouldConfirmPayment = confirmPayment === true;
 
     if (!Number.isInteger(parsedRestauranteId) || parsedRestauranteId <= 0) {
       return res.status(400).json({
@@ -567,6 +606,13 @@ router.post("/create-payment-intent", async (req, res) => {
       return res.status(400).json({
         success: false,
         error: "orderType inválido",
+      });
+    }
+
+    if (shouldConfirmPayment && !parsedPaymentMethodId.startsWith("pm_")) {
+      return res.status(400).json({
+        success: false,
+        error: "paymentMethodId requerido para confirmar el pago",
       });
     }
 
@@ -601,13 +647,8 @@ router.post("/create-payment-intent", async (req, res) => {
       });
     }
 
-    /**
-     * Regla final Denix:
-     * Pickup: $2.98
-     * Delivery: $2.98 + $9.88 = $12.86
-     */
     const applicationFeeCents =
-      parsedOrderType === "delivery" ? 1286 : 298;
+      getDenixApplicationFeeCents(parsedOrderType);
 
     if (parsedAmountCents <= applicationFeeCents) {
       return res.status(400).json({
@@ -615,62 +656,79 @@ router.post("/create-payment-intent", async (req, res) => {
         error: "El total de la orden no puede ser menor o igual al fee de Denix",
       });
     }
-      const parsedPaymentMethodId = String(paymentMethodId || "").trim();
-        const shouldConfirmPayment = confirmPayment === true;
 
-        if (shouldConfirmPayment && !parsedPaymentMethodId.startsWith("pm_")) {
-          return res.status(400).json({
-            success: false,
-            error: "paymentMethodId requerido para confirmar el pago",
-          });
-        }
-        const paymentIntentPayload = {
-        amount: parsedAmountCents,
-        currency: parsedCurrency,
+    const paymentIntentPayload = {
+      amount: parsedAmountCents,
+      currency: parsedCurrency,
 
-        application_fee_amount: applicationFeeCents,
+      application_fee_amount: applicationFeeCents,
 
-        receipt_email: customerEmail || undefined,
+      receipt_email: customerEmail || undefined,
 
-        description: `WooCommerce Order #${parsedWooOrderId}`,
+      description: `WooCommerce Order #${parsedWooOrderId}`,
 
-        metadata: {
-          woo_order_id: parsedWooOrderId,
-          restaurante_id: String(restaurante.id),
-          restaurante_nombre: restaurante.nombre,
-          order_type: parsedOrderType,
-          denix_application_fee_cents: String(applicationFeeCents),
-          source: "denix_woocommerce_embedded_checkout",
-        },
+      metadata: {
+        woo_order_id: parsedWooOrderId,
+        restaurante_id: String(restaurante.id),
+        restaurante_nombre: restaurante.nombre,
+        order_type: parsedOrderType,
+        denix_application_fee_cents: String(applicationFeeCents),
+        source: "denix_woocommerce_embedded_checkout",
+      },
+    };
+
+    if (shouldConfirmPayment) {
+      paymentIntentPayload.payment_method = parsedPaymentMethodId;
+      paymentIntentPayload.confirm = true;
+      paymentIntentPayload.confirmation_method = "automatic";
+      paymentIntentPayload.payment_method_types = ["card"];
+    } else {
+      paymentIntentPayload.automatic_payment_methods = {
+        enabled: true,
       };
+    }
 
-      if (shouldConfirmPayment) {
-        paymentIntentPayload.payment_method = parsedPaymentMethodId;
-        paymentIntentPayload.confirm = true;
-        paymentIntentPayload.confirmation_method = "automatic";
-        paymentIntentPayload.payment_method_types = ["card"];
-      } else {
-        paymentIntentPayload.automatic_payment_methods = {
-          enabled: true,
-        };
+    const paymentIntent = await stripe.paymentIntents.create(
+      paymentIntentPayload,
+      {
+        stripeAccount: restaurante.stripe_account_id,
       }
+    );
 
-      const paymentIntent = await stripe.paymentIntents.create(
-        paymentIntentPayload,
-        {
-          stripeAccount: restaurante.stripe_account_id,
-        }
-      );
+    /**
+     * Guardar datos Stripe Connect en pedidos.
+     * Si la orden aún no está insertada por el webhook, este UPDATE simplemente no afectará filas.
+     */
+    await pool.query(
+      `
+      UPDATE pedidos
+      SET
+        stripe_payment_intent_id = $1,
+        stripe_account_id = $2,
+        denix_application_fee_cents = $3,
+        payment_split_status = $4
+      WHERE woo_order_id = $5
+        AND restaurante_id = $6
+      `,
+      [
+        paymentIntent.id,
+        restaurante.stripe_account_id,
+        applicationFeeCents,
+        paymentIntent.status,
+        parsedWooOrderId,
+        parsedRestauranteId,
+      ]
+    );
 
-      return res.json({
-        success: true,
-        clientSecret: paymentIntent.client_secret,
-        paymentIntentId: paymentIntent.id,
-        status: paymentIntent.status,
-        connectedAccount: restaurante.stripe_account_id,
-        applicationFeeAmount: applicationFeeCents,
-        nextAction: paymentIntent.next_action || null,
-      });
+    return res.json({
+      success: true,
+      clientSecret: paymentIntent.client_secret,
+      paymentIntentId: paymentIntent.id,
+      status: paymentIntent.status,
+      connectedAccount: restaurante.stripe_account_id,
+      applicationFeeAmount: applicationFeeCents,
+      nextAction: paymentIntent.next_action || null,
+    });
   } catch (error) {
     console.error("Error creando PaymentIntent WooCommerce:", error);
 
@@ -680,6 +738,283 @@ router.post("/create-payment-intent", async (req, res) => {
         error?.raw?.message ||
         error.message ||
         "No se pudo crear el PaymentIntent",
+    });
+  }
+});
+
+/**
+ * Refund para pagos Stripe Connect Direct Charges.
+ *
+ * Regla Denix:
+ * - Refund total: cliente recibe todo, restaurante asume todo, Denix conserva fee.
+ * - Refund parcial: cliente recibe el monto parcial, restaurante asume, Denix conserva fee.
+ * - Por eso refund_application_fee SIEMPRE es false.
+ *
+ * POST /api/stripe/connect/refund
+ */
+router.post("/refund", async (req, res) => {
+  try {
+    if (!validateDenixSecret(req)) {
+      return res.status(401).json({
+        success: false,
+        error: "No autorizado",
+      });
+    }
+
+    const {
+      restauranteId,
+      wooOrderId,
+      refundType,
+      refundAmountCents,
+      reason,
+      refundRequestId,
+    } = req.body;
+
+    const parsedRestauranteId = Number(restauranteId);
+    const parsedWooOrderId = String(wooOrderId || "").trim();
+    const parsedRefundType = String(refundType || "").toLowerCase();
+    const parsedRefundAmountCents = Number(refundAmountCents || 0);
+    const parsedRefundRequestId = String(refundRequestId || "").trim();
+
+    if (!Number.isInteger(parsedRestauranteId) || parsedRestauranteId <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: "restauranteId inválido",
+      });
+    }
+
+    if (!parsedWooOrderId) {
+      return res.status(400).json({
+        success: false,
+        error: "wooOrderId requerido",
+      });
+    }
+
+    if (parsedRefundType !== "total" && parsedRefundType !== "partial") {
+      return res.status(400).json({
+        success: false,
+        error: "refundType debe ser total o partial",
+      });
+    }
+
+    if (
+      parsedRefundType === "partial" &&
+      (!Number.isInteger(parsedRefundAmountCents) ||
+        parsedRefundAmountCents <= 0)
+    ) {
+      return res.status(400).json({
+        success: false,
+        error: "refundAmountCents requerido para refund parcial",
+      });
+    }
+
+    const pedidoResult = await pool.query(
+      `
+      SELECT
+        id,
+        woo_order_id,
+        restaurante_id,
+        total,
+        refunded,
+        refund_amount,
+        stripe_payment_intent_id,
+        stripe_account_id
+      FROM pedidos
+      WHERE woo_order_id = $1
+        AND restaurante_id = $2
+      LIMIT 1
+      `,
+      [parsedWooOrderId, parsedRestauranteId]
+    );
+
+    if (pedidoResult.rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "Pedido no encontrado en la base de datos",
+      });
+    }
+
+    const pedido = pedidoResult.rows[0];
+
+    if (!pedido.stripe_payment_intent_id || !pedido.stripe_account_id) {
+      return res.status(400).json({
+        success: false,
+        error:
+          "Este pedido no tiene datos de Stripe Connect guardados. No se puede hacer refund automático.",
+      });
+    }
+
+    if (parsedRefundType === "total" && pedido.refunded === true) {
+      return res.status(400).json({
+        success: false,
+        error: "Este pedido ya tiene un refund total registrado",
+      });
+    }
+
+    const paymentIntent = await stripe.paymentIntents.retrieve(
+      pedido.stripe_payment_intent_id,
+      {},
+      {
+        stripeAccount: pedido.stripe_account_id,
+      }
+    );
+
+    if (paymentIntent.status !== "succeeded") {
+      return res.status(400).json({
+        success: false,
+        error: `El pago no está completado. Estado actual: ${paymentIntent.status}`,
+      });
+    }
+
+    const totalPaidCents = Number(paymentIntent.amount);
+    const amountRefundedAlreadyCents = Number(paymentIntent.amount_received || 0) > 0
+      ? Number(paymentIntent.amount) - Number(paymentIntent.amount_capturable || 0)
+      : 0;
+
+    let amountToRefundCents = null;
+
+    if (parsedRefundType === "partial") {
+      amountToRefundCents = parsedRefundAmountCents;
+
+      if (amountToRefundCents >= totalPaidCents) {
+        return res.status(400).json({
+          success: false,
+          error: "Para devolver el total usa refundType total, no partial.",
+        });
+      }
+    }
+
+    const refundPayload = {
+      payment_intent: pedido.stripe_payment_intent_id,
+
+      /**
+       * CLAVE DEL MODELO DENIX:
+       * Denix conserva su fee siempre.
+       */
+      refund_application_fee: false,
+
+      metadata: {
+        woo_order_id: parsedWooOrderId,
+        restaurante_id: String(parsedRestauranteId),
+        refund_type: parsedRefundType,
+        denix_keeps_fee: "true",
+        reason: reason ? String(reason).slice(0, 300) : "",
+      },
+    };
+
+    if (parsedRefundType === "partial") {
+      refundPayload.amount = amountToRefundCents;
+    }
+
+    const safeRequestId =
+      parsedRefundRequestId ||
+      crypto.randomBytes(12).toString("hex");
+
+    const idempotencyKey =
+      `denix_refund_${parsedWooOrderId}_${parsedRefundType}_${amountToRefundCents || "remaining"}_${safeRequestId}`;
+
+    const refund = await stripe.refunds.create(
+      refundPayload,
+      {
+        stripeAccount: pedido.stripe_account_id,
+        idempotencyKey,
+      }
+    );
+
+    const refundedAmountCents =
+      refund.amount || amountToRefundCents || totalPaidCents;
+
+    await pool.query(
+      `
+      INSERT INTO stripe_connect_refunds (
+        woo_order_id,
+        restaurante_id,
+        stripe_payment_intent_id,
+        stripe_account_id,
+        stripe_refund_id,
+        refund_type,
+        refund_amount_cents,
+        refund_application_fee,
+        status
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7,false,$8)
+      ON CONFLICT (stripe_refund_id) DO NOTHING
+      `,
+      [
+        parsedWooOrderId,
+        parsedRestauranteId,
+        pedido.stripe_payment_intent_id,
+        pedido.stripe_account_id,
+        refund.id,
+        parsedRefundType,
+        refundedAmountCents,
+        refund.status,
+      ]
+    );
+
+    await pool.query(
+      `
+      UPDATE pedidos
+      SET
+        refunded = CASE WHEN $1 = 'total' THEN true ELSE refunded END,
+        refund_amount = COALESCE(refund_amount, 0) + ($2::numeric / 100),
+        stripe_refund_id = $3,
+        stripe_refund_status = $4,
+        stripe_refund_amount_cents = COALESCE(stripe_refund_amount_cents, 0) + $2,
+        stripe_refunded_at = NOW(),
+        stripe_refund_error = NULL
+      WHERE woo_order_id = $5
+        AND restaurante_id = $6
+      `,
+      [
+        parsedRefundType,
+        refundedAmountCents,
+        refund.id,
+        refund.status,
+        parsedWooOrderId,
+        parsedRestauranteId,
+      ]
+    );
+
+    return res.json({
+      success: true,
+      message: "Refund procesado correctamente. Denix conserva su fee.",
+      refund: {
+        id: refund.id,
+        status: refund.status,
+        amount: refund.amount,
+        currency: refund.currency,
+        refund_application_fee: false,
+      },
+      denix_keeps_fee: true,
+    });
+  } catch (error) {
+    console.error("Error procesando refund Stripe Connect:", error);
+
+    const errorMessage =
+      error?.raw?.message ||
+      error.message ||
+      "No se pudo procesar el refund";
+
+    try {
+      const { restauranteId, wooOrderId } = req.body || {};
+
+      if (wooOrderId && restauranteId) {
+        await pool.query(
+          `
+          UPDATE pedidos
+          SET stripe_refund_error = $1
+          WHERE woo_order_id = $2
+            AND restaurante_id = $3
+          `,
+          [errorMessage, String(wooOrderId), Number(restauranteId)]
+        );
+      }
+    } catch (_) {}
+
+    return res.status(500).json({
+      success: false,
+      error: errorMessage,
     });
   }
 });
