@@ -1019,4 +1019,92 @@ router.post("/refund", async (req, res) => {
   }
 });
 
+
+// DEBUG TEMPORAL - borrar después de pasar a producción
+router.get("/debug-live/:restauranteId", async (req, res) => {
+  try {
+    if (!validateDenixSecret(req)) {
+      return res.status(401).json({
+        success: false,
+        message: "No autorizado"
+      });
+    }
+
+    const { restauranteId } = req.params;
+
+    const secretKey = process.env.STRIPE_SECRET_KEY || "";
+    const clientId = process.env.STRIPE_CONNECT_CLIENT_ID || "";
+
+    let keyMode = "unknown";
+    if (secretKey.startsWith("sk_live_")) keyMode = "live";
+    if (secretKey.startsWith("sk_test_")) keyMode = "test";
+
+    const restauranteResult = await pool.query(
+      `SELECT 
+        id,
+        nombre,
+        stripe_account_id,
+        stripe_connect_status,
+        stripe_livemode,
+        stripe_connected_at
+       FROM restaurantes
+       WHERE id = $1`,
+      [restauranteId]
+    );
+
+    if (restauranteResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Restaurante no encontrado"
+      });
+    }
+
+    const restaurante = restauranteResult.rows[0];
+
+    let stripeAccount = null;
+    let stripeError = null;
+
+    try {
+      stripeAccount = await stripe.accounts.retrieve(restaurante.stripe_account_id);
+    } catch (err) {
+      stripeError = {
+        type: err.type,
+        code: err.code,
+        message: err.message
+      };
+    }
+
+    return res.json({
+      success: true,
+      backend: {
+        stripe_secret_key_mode: keyMode,
+        connect_client_id_exists: !!clientId,
+        connect_client_id_starts_with: clientId ? clientId.substring(0, 8) : null
+      },
+      database: restaurante,
+      stripe_response: stripeAccount
+        ? {
+            id: stripeAccount.id,
+            livemode: stripeAccount.livemode,
+            charges_enabled: stripeAccount.charges_enabled,
+            payouts_enabled: stripeAccount.payouts_enabled,
+            details_submitted: stripeAccount.details_submitted
+          }
+        : null,
+      stripe_error: stripeError
+    });
+  } catch (error) {
+    console.error("Debug live error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error en debug live",
+      error: error.message
+    });
+  }
+});
+
+
+
+
+
 module.exports = router;
