@@ -12,6 +12,10 @@ window.currentOrderTotal = 0;
 
 window.viendoPedidos = false;
 
+// Evita consultas duplicadas mientras una carga de pedidos sigue en curso.
+let pedidosCargando = false;
+let chequeandoUltimoPedido = false;
+
 // activar audio
 document.addEventListener('click', () => {
   audioPermitido = true;
@@ -214,6 +218,10 @@ async function mostrarInicio() {
 // PEDIDOS (TIEMPO REAL)
 // =====================
 async function verPedidos(esAuto = false) {
+  // Evita que dos refrescos de pedidos se crucen y dupliquen consultas.
+  if (pedidosCargando) return;
+  pedidosCargando = true;
+
   limpiarAlertaPedidos();
 
   document.getElementById('tituloPagina').innerText = "Pedidos";
@@ -459,17 +467,21 @@ data.forEach(p => {
   } catch (error) {
     console.error("ERROR PEDIDOS:", error);
     contenedor.innerHTML = "<p>Error cargando pedidos</p>";
+  } finally {
+    pedidosCargando = false;
   }
 }
 
 // =====================
-// LOOP TIEMPO REAL
+// ACTUALIZACIÓN DE TARJETAS DE PEDIDOS
 // =====================
+// Las órdenes nuevas se detectan antes con /orders-latest.
+// Este refresco completo es respaldo para cambios de estado, driver y tracking.
 setInterval(() => {
-  if (window.viendoPedidos) {
+  if (window.viendoPedidos && !document.hidden) {
     verPedidos(true);
   }
-}, 2000);
+}, 20000);
 
 
 // =====================
@@ -1199,34 +1211,66 @@ if ('serviceWorker' in navigator) {
 }
 }
 
-setInterval(async () => {
+// =====================
+// CHEQUEO LIVIANO DE NUEVAS ÓRDENES
+// =====================
+// Solo consulta id, woo_order_id y fecha. No descarga el detalle completo
+// de todos los pedidos cada pocos segundos.
+async function chequearUltimoPedido() {
+  if (chequeandoUltimoPedido) return;
+
+  chequeandoUltimoPedido = true;
+
   try {
+    const res = await fetch('/orders-latest?ts=' + Date.now(), {
+      cache: 'no-store'
+    });
 
-    const res = await fetch('/orders-complete');
-    const data = await res.json();
+    if (!res.ok) {
+      throw new Error('No se pudo consultar el último pedido');
+    }
 
-    if (!data.length) return;
+    const pedido = await res.json();
 
-    const nuevoId = data[0].id;
+    if (!pedido) return;
+
+    const nuevoId = pedido.id;
 
     // 🔥 DETECTAR NUEVO PEDIDO GLOBAL
     if (ultimoPedidoGlobal && nuevoId > ultimoPedidoGlobal) {
 
       // 🔊 SONIDO SIEMPRE
       audioPedido.currentTime = 0;
-      audioPedido.play();
+      audioPedido.play().catch(() => {});
 
       // 🔴 ACTIVAR PARPADEO
       activarAlertaPedidos();
+
+      // Si ya está viendo Pedidos, recarga inmediatamente las tarjetas.
+      if (window.viendoPedidos) {
+        verPedidos(true);
+      }
     }
 
     ultimoPedidoGlobal = nuevoId;
 
   } catch (e) {
     console.error("ERROR GLOBAL PEDIDOS:", e);
+  } finally {
+    chequeandoUltimoPedido = false;
   }
+}
 
-}, 3000); // cada 3s
+// Mantiene detección visual de pedidos nuevos con máximo 5 segundos de espera.
+// En segundo plano no consulta: las notificaciones push siguen llegando de inmediato.
+setInterval(() => {
+  if (
+    localStorage.getItem('login') === 'true' &&
+    !document.hidden
+  ) {
+    chequearUltimoPedido();
+  }
+}, 5000);
 
 function activarAlertaPedidos() {
   const btn = document.getElementById('btn-pedidos');
