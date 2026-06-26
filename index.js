@@ -736,6 +736,31 @@ app.get('/orders-complete', async (req, res) => {
   }
 });
 
+
+app.get('/orders-latest', async (req, res) => {
+  try {
+    const restauranteId = req.session?.restaurante_id || 1;
+
+    const result = await pool.query(
+      `SELECT id, woo_order_id, created_at
+       FROM pedidos
+       WHERE restaurante_id = $1
+       ORDER BY id DESC
+       LIMIT 1`,
+      [restauranteId]
+    );
+
+    res.json(result.rows[0] || null);
+
+  } catch (error) {
+    console.error("❌ ERROR ÚLTIMO PEDIDO:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error consultando último pedido"
+    });
+  }
+});
+
 // ===============================
 // 🛒 PRODUCTOS (CRUD)
 // ===============================
