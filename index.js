@@ -414,6 +414,7 @@ app.post('/webhook-order', async (req, res) => {
   }
 
   console.log("🔥 WOO WEBHOOK:", order.id);
+  invalidarCachePedidos(restauranteId);
 
   try {
 
@@ -683,17 +684,47 @@ app.get('/shipday-live', (req, res) => {
   res.json(shipdayOrders);
 });
 
+// ======================================================
+// CACHE CORTO DE PEDIDOS
+// Protege Supabase aunque existan apps antiguas abiertas.
+// ======================================================
+const cachePedidos = new Map();
+const CACHE_PEDIDOS_MS = 5000;
+
+function invalidarCachePedidos(restauranteId) {
+  cachePedidos.delete(String(restauranteId));
+}
 
 // ===============================
-// 🧩 UNIÓN FINAL
+// 🧩 UNIÓN FINAL CON CACHE
 // ===============================
 app.get('/orders-complete', async (req, res) => {
+  const restaurante_id = req.session?.restaurante_id || 1;
+  const cacheKey = String(restaurante_id);
+  const ahora = Date.now();
+
+  // Nunca dejar que el navegador guarde una versión vieja.
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+
   try {
+    const cacheActual = cachePedidos.get(cacheKey);
 
-    // 🔥 OBTENER RESTAURANTE ACTUAL (SAFE)
-    const restaurante_id = req.session?.restaurante_id || 1;
+    // Si ya hay datos recientes, Render responde sin consultar Supabase.
+    if (
+      cacheActual?.data &&
+      ahora - cacheActual.createdAt < CACHE_PEDIDOS_MS
+    ) {
+      return res.json(cacheActual.data);
+    }
 
-    const result = await pool.query(`
+    // Si varias tablets consultan exactamente al mismo tiempo,
+    // todas esperan la misma consulta, no crean varias consultas SQL.
+    if (cacheActual?.promesa) {
+      const data = await cacheActual.promesa;
+      return res.json(data);
+    }
+
+    const promesaConsulta = pool.query(`
       SELECT 
         p.id,
         p.woo_order_id,
@@ -704,7 +735,6 @@ app.get('/orders-complete', async (req, res) => {
         p.items,
         p.created_at,
 
-        -- 🔥 REFUND
         p.refunded,
         p.refund_amount,
         d.driver_name,
@@ -726,13 +756,28 @@ app.get('/orders-complete', async (req, res) => {
       WHERE p.restaurante_id = $1
 
       ORDER BY p.created_at DESC
-    `, [restaurante_id]);
+    `, [restaurante_id]).then(result => result.rows);
 
-    res.json(result.rows);
+    cachePedidos.set(cacheKey, {
+      data: cacheActual?.data || null,
+      createdAt: cacheActual?.createdAt || 0,
+      promesa: promesaConsulta
+    });
+
+    const data = await promesaConsulta;
+
+    cachePedidos.set(cacheKey, {
+      data,
+      createdAt: Date.now(),
+      promesa: null
+    });
+
+    return res.json(data);
 
   } catch (error) {
-    console.error(error);
-    res.status(500).send('Error join');
+    cachePedidos.delete(cacheKey);
+    console.error("❌ ERROR ORDERS-COMPLETE:", error);
+    return res.status(500).send('Error join');
   }
 });
 
