@@ -588,6 +588,7 @@ const deliveryPostcode = order.shipping?.postcode || order.billing?.postcode || 
 app.post('/webhook-shipday', async (req, res) => {
 
   const data = req.body;
+  const restauranteId = 1;
 
   const driverName = data.carrier?.name || null;
   const orderNumber = data.order?.order_number || null;
@@ -599,7 +600,7 @@ app.post('/webhook-shipday', async (req, res) => {
 
   try {
 
-    // 🔥 1. GUARDAR DELIVERY (COMO YA TENÍAS)
+    // 🔥 1. GUARDAR DELIVERY
     await pool.query(
       `INSERT INTO deliveries 
       (order_number, driver_name, status, delivery_cost, tracking_url, picked_up_at, delivered_at)
@@ -623,9 +624,11 @@ app.post('/webhook-shipday', async (req, res) => {
       ]
     );
 
+    invalidarCachePedidos(restauranteId);
+
     console.log("🚚 SHIPDAY OK (delivery actualizado)");
 
-    // 🔥 2. TRAER PEDIDO COMPLETO DESDE WOO (RÁPIDO)
+    // 🔥 2. TRAER PEDIDO COMPLETO DESDE WOO
     if (orderNumber) {
 
       setTimeout(async () => {
@@ -662,38 +665,133 @@ app.post('/webhook-shipday', async (req, res) => {
             };
           });
 
-          // 🔥 3. INSERTAR PEDIDO COMPLETO (UNA SOLA VEZ)
-await pool.query(
-  `INSERT INTO pedidos 
-  (restaurante_id, total, estado, woo_order_id, customer_name, customer_phone, items, refund_items, created_at)
-  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
-  ON CONFLICT (woo_order_id)
-  DO UPDATE SET
-    estado = EXCLUDED.estado,
-    total = EXCLUDED.total,
-    customer_name = EXCLUDED.customer_name,
-    customer_phone = EXCLUDED.customer_phone,
-    items = EXCLUDED.items,
-    refund_items = EXCLUDED.refund_items`,
-  [
-    1,
-    order.total,
-    order.status,
-    order.id,
-    `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
-    order.billing?.phone || '',
-    JSON.stringify(items),
-    JSON.stringify(order.line_items || [])
-  ]
-);
+          const deliveryAddress = order.shipping?.address_1 || order.billing?.address_1 || '';
+          const deliveryCity = order.shipping?.city || order.billing?.city || '';
+          const deliveryPostcode = order.shipping?.postcode || order.billing?.postcode || '';
 
-          console.log("🔥 PEDIDO COMPLETO GUARDADO DESDE SHIPDAY");
+          // 🔥 3. INSERTAR / ACTUALIZAR PEDIDO COMO DELIVERY
+          await pool.query(
+            `INSERT INTO pedidos 
+            (
+              restaurante_id,
+              total,
+              estado,
+              woo_order_id,
+              customer_name,
+              customer_phone,
+              items,
+              refund_items,
+              tipo_pedido,
+              delivery_address,
+              delivery_city,
+              delivery_postcode,
+              created_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'delivery', $9, $10, $11, NOW())
+            ON CONFLICT (woo_order_id)
+            DO UPDATE SET
+              estado = EXCLUDED.estado,
+              total = EXCLUDED.total,
+              customer_name = EXCLUDED.customer_name,
+              customer_phone = EXCLUDED.customer_phone,
+              items = EXCLUDED.items,
+              refund_items = EXCLUDED.refund_items,
+              tipo_pedido = 'delivery',
+              delivery_address = EXCLUDED.delivery_address,
+              delivery_city = EXCLUDED.delivery_city,
+              delivery_postcode = EXCLUDED.delivery_postcode`,
+            [
+              restauranteId,
+              order.total,
+              order.status,
+              String(order.id),
+              `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
+              order.billing?.phone || '',
+              JSON.stringify(items),
+              JSON.stringify(order.line_items || []),
+              deliveryAddress,
+              deliveryCity,
+              deliveryPostcode
+            ]
+          );
+
+          invalidarCachePedidos(restauranteId);
+
+          console.log("🔥 PEDIDO COMPLETO GUARDADO DESDE SHIPDAY:", order.id);
+
+          // ======================================================
+          // 🔔 PUSH SI EL PEDIDO FUE CREADO DESDE SHIPDAY
+          // Si Woo ya notificó, este UPDATE no devuelve filas.
+          // ======================================================
+          const pushClaim = await pool.query(
+            `UPDATE pedidos
+             SET push_notified = TRUE,
+                 push_notified_at = NOW(),
+                 push_notification_error = NULL
+             WHERE woo_order_id = $1
+             AND restaurante_id = $2
+             AND COALESCE(push_notified, FALSE) = FALSE
+             RETURNING id`,
+            [
+              String(order.id),
+              restauranteId
+            ]
+          );
+
+          if (!pushClaim.rows.length) {
+            console.log("🔕 PUSH SHIPDAY OMITIDO: orden ya notificada:", order.id);
+            return;
+          }
+
+          try {
+
+            const resultadoPush = await enviarPushNuevoPedido(restauranteId, order);
+
+            console.log("✅ PUSH NUEVO PEDIDO DESDE SHIPDAY:", {
+              order_id: order.id,
+              enviados: resultadoPush.enviados,
+              desactivados: resultadoPush.desactivados,
+              sinDispositivos: resultadoPush.sinDispositivos
+            });
+
+            if (resultadoPush.sinDispositivos) {
+              await pool.query(
+                `UPDATE pedidos
+                 SET push_notification_error = $1
+                 WHERE woo_order_id = $2
+                 AND restaurante_id = $3`,
+                [
+                  'No había dispositivos activos suscritos',
+                  String(order.id),
+                  restauranteId
+                ]
+              );
+            }
+
+          } catch (pushError) {
+
+            console.error("❌ ERROR PUSH DESDE SHIPDAY:", pushError.message);
+
+            await pool.query(
+              `UPDATE pedidos
+               SET push_notified = FALSE,
+                   push_notified_at = NULL,
+                   push_notification_error = $1
+               WHERE woo_order_id = $2
+               AND restaurante_id = $3`,
+              [
+                pushError.message,
+                String(order.id),
+                restauranteId
+              ]
+            );
+          }
 
         } catch (err) {
           console.log("❌ ERROR WOO DESDE SHIPDAY:", err.message);
         }
 
-      }, 2000); // 🔥 pequeño delay para que Woo esté listo
+      }, 2000);
     }
 
     res.sendStatus(200);
@@ -769,7 +867,6 @@ app.get('/orders-complete', async (req, res) => {
         d.driver_name,
 
         CASE 
-          WHEN p.tipo_pedido IS NOT NULL THEN p.tipo_pedido
           WHEN d.order_number IS NOT NULL THEN 'delivery'
           ELSE 'pickup'
         END AS estado_envio,
