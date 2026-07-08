@@ -431,42 +431,71 @@ app.post('/webhook-order', async (req, res) => {
       };
     });
 
+
+    const shippingText = (order.shipping_lines || [])
+  .map(line => `${line.method_id || ''} ${line.method_title || ''}`)
+  .join(' ')
+  .toLowerCase();
+
+const esPickup =
+  shippingText.includes('local_pickup') ||
+  shippingText.includes('pickup') ||
+  shippingText.includes('pick up') ||
+  shippingText.includes('recoger');
+
+const tipoPedido = esPickup ? 'pickup' : 'delivery';
+
+const deliveryAddress = order.shipping?.address_1 || order.billing?.address_1 || '';
+const deliveryCity = order.shipping?.city || order.billing?.city || '';
+const deliveryPostcode = order.shipping?.postcode || order.billing?.postcode || '';
     // ======================================================
     // ✅ GUARDAR ORDEN COMO YA FUNCIONA ACTUALMENTE
     // No se toca items ni refund_items
     // ======================================================
     await pool.query(
-      `INSERT INTO pedidos 
-       (
-         restaurante_id,
-         total,
-         estado,
-         woo_order_id,
-         customer_name,
-         customer_phone,
-         items,
-         refund_items
-       )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       ON CONFLICT (woo_order_id)
-       DO UPDATE SET
-         estado = EXCLUDED.estado,
-         total = EXCLUDED.total,
-         customer_name = EXCLUDED.customer_name,
-         customer_phone = EXCLUDED.customer_phone,
-         items = EXCLUDED.items,
-         refund_items = EXCLUDED.refund_items`,
-      [
-        restauranteId,
-        order.total,
-        order.status,
-        order.id,
-        `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
-        order.billing?.phone || '',
-        JSON.stringify(items),
-        JSON.stringify(order.line_items || [])
-      ]
-    );
+  `INSERT INTO pedidos 
+   (
+     restaurante_id,
+     total,
+     estado,
+     woo_order_id,
+     customer_name,
+     customer_phone,
+     items,
+     refund_items,
+     tipo_pedido,
+     delivery_address,
+     delivery_city,
+     delivery_postcode
+   )
+   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+   ON CONFLICT (woo_order_id)
+   DO UPDATE SET
+     estado = EXCLUDED.estado,
+     total = EXCLUDED.total,
+     customer_name = EXCLUDED.customer_name,
+     customer_phone = EXCLUDED.customer_phone,
+     items = EXCLUDED.items,
+     refund_items = EXCLUDED.refund_items,
+     tipo_pedido = EXCLUDED.tipo_pedido,
+     delivery_address = EXCLUDED.delivery_address,
+     delivery_city = EXCLUDED.delivery_city,
+     delivery_postcode = EXCLUDED.delivery_postcode`,
+  [
+    restauranteId,
+    order.total,
+    order.status,
+    order.id,
+    `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
+    order.billing?.phone || '',
+    JSON.stringify(items),
+    JSON.stringify(order.line_items || []),
+    tipoPedido,
+    deliveryAddress,
+    deliveryCity,
+    deliveryPostcode
+  ]
+);
 
     console.log("✅ WOO GUARDADO CON ITEMS:", order.id);
 
@@ -740,8 +769,9 @@ app.get('/orders-complete', async (req, res) => {
         d.driver_name,
 
         CASE 
-          WHEN d.order_number IS NULL THEN 'pickup'
-          ELSE 'delivery'
+          WHEN p.tipo_pedido IS NOT NULL THEN p.tipo_pedido
+          WHEN d.order_number IS NOT NULL THEN 'delivery'
+          ELSE 'pickup'
         END AS estado_envio,
 
         d.delivery_cost,
@@ -751,7 +781,7 @@ app.get('/orders-complete', async (req, res) => {
 
       FROM pedidos p
       LEFT JOIN deliveries d
-        ON d.order_number = p.woo_order_id
+        ON d.order_number::text = p.woo_order_id::text
 
       WHERE p.restaurante_id = $1
 
