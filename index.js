@@ -322,11 +322,75 @@ async function enviarPushNuevoPedido(restauranteId, order) {
     };
   }
 
-  const esPickup = (order.shipping_lines || []).some(
-    line => line.method_id === 'local_pickup'
+  let tipoPedido = 'Delivery';
+
+try {
+  const tipoRes = await pool.query(
+    `SELECT 
+       p.tipo_pedido,
+       d.order_number
+     FROM pedidos p
+     LEFT JOIN deliveries d
+       ON d.order_number::text = p.woo_order_id::text
+     WHERE p.restaurante_id = $1
+       AND p.woo_order_id::text = $2
+     LIMIT 1`,
+    [restauranteId, String(order.id)]
   );
 
-  const tipoPedido = esPickup ? 'Pickup' : 'Delivery';
+  const infoPedido = tipoRes.rows[0];
+
+  if (infoPedido?.order_number) {
+    tipoPedido = 'Delivery';
+  } else if (String(infoPedido?.tipo_pedido || '').toLowerCase() === 'delivery') {
+    tipoPedido = 'Delivery';
+  } else if (String(infoPedido?.tipo_pedido || '').toLowerCase() === 'pickup') {
+    tipoPedido = 'Pickup';
+  } else {
+    const shippingText = (order.shipping_lines || [])
+      .map(line => `${line.method_id || ''} ${line.method_title || ''}`)
+      .join(' ')
+      .toLowerCase();
+
+    const tieneDireccionShipping = !!(
+      order.shipping?.address_1 ||
+      order.shipping?.city ||
+      order.shipping?.postcode
+    );
+
+    const pareceDelivery =
+      shippingText.includes('delivery') ||
+      shippingText.includes('shipday') ||
+      shippingText.includes('local_delivery') ||
+      shippingText.includes('envio') ||
+      shippingText.includes('envío') ||
+      tieneDireccionShipping;
+
+    const parecePickup =
+      shippingText.includes('local_pickup') ||
+      shippingText.includes('pickup') ||
+      shippingText.includes('pick up') ||
+      shippingText.includes('recoger');
+
+    tipoPedido = pareceDelivery ? 'Delivery' : (parecePickup ? 'Pickup' : 'Delivery');
+  }
+
+} catch (tipoError) {
+  console.error("⚠️ ERROR DETECTANDO TIPO DE PEDIDO PARA PUSH:", tipoError.message);
+
+  const shippingText = (order.shipping_lines || [])
+    .map(line => `${line.method_id || ''} ${line.method_title || ''}`)
+    .join(' ')
+    .toLowerCase();
+
+  const parecePickup =
+    shippingText.includes('local_pickup') ||
+    shippingText.includes('pickup') ||
+    shippingText.includes('pick up') ||
+    shippingText.includes('recoger');
+
+  tipoPedido = parecePickup ? 'Pickup' : 'Delivery';
+}
 
   const payload = JSON.stringify({
     title: '🔔 Nuevo pedido recibido',
