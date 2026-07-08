@@ -867,10 +867,10 @@ app.get('/orders-complete', async (req, res) => {
         d.driver_name,
 
         CASE 
-          WHEN p.tipo_pedido IS NOT NULL THEN p.tipo_pedido
-          WHEN d.order_number IS NOT NULL THEN 'delivery'
-          ELSE 'pickup'
-        END AS estado_envio,
+        WHEN p.tipo_pedido = 'delivery' THEN 'delivery'
+        WHEN d.order_number IS NOT NULL THEN 'delivery'
+        ELSE 'pickup'
+      END AS estado_envio,
 
         d.delivery_cost,
         d.tracking_url,
