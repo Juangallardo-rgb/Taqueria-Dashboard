@@ -663,13 +663,17 @@ router.post("/create-payment-intent", async (req, res) => {
       paymentIntentPayload.confirm = true;
     }
 
-    const paymentIntent = await stripe.paymentIntents.create(
-      paymentIntentPayload,
-      {
-        stripeAccount: restaurante.stripe_account_id,
-        idempotencyKey: `denix_pi_${cleanRestauranteId}_${cleanWooOrderId}_${cleanAmountCents}_${normalizedOrderType}`,
-      }
-    );
+    const paymentAttemptId = paymentMethodId
+  ? String(paymentMethodId)
+  : crypto.randomUUID();
+
+const paymentIntent = await stripe.paymentIntents.create(
+  paymentIntentPayload,
+  {
+    stripeAccount: restaurante.stripe_account_id,
+    idempotencyKey: `denix_pi_${cleanRestauranteId}_${cleanWooOrderId}_${cleanAmountCents}_${normalizedOrderType}_${paymentAttemptId}`,
+  }
+);
 
     await pool.query(
       `
