@@ -122,24 +122,73 @@ window.togglePassword = togglePassword;
 
 
 // =====================
-// AUTO LOGIN
+// VALIDAR SESIÓN AL INICIAR
 // =====================
-window.addEventListener('load', async () => {
+function mostrarLoginSinSesion() {
+  const loginScreen = document.getElementById('loginScreen');
+  const dashboard = document.getElementById('dashboard');
 
-  if (localStorage.getItem("login") === "true") {
+  localStorage.removeItem('login');
+  window.viendoPedidos = false;
 
-    const loginScreen = document.getElementById('loginScreen');
-    const dashboard = document.getElementById('dashboard');
+  if (loginScreen) loginScreen.style.display = 'flex';
+  if (dashboard) dashboard.style.display = 'none';
+}
 
-    if (loginScreen) {
-      loginScreen.style.display = "none";
+async function cargarMiRestaurante() {
+  const logo = document.getElementById('businessLogo');
+
+  try {
+    const res = await fetch('/mi-restaurante', { cache: 'no-store' });
+
+    if (!res.ok) return;
+
+    const restaurant = await res.json();
+
+    if (logo) {
+      logo.src = restaurant.logo_url || '/labonita.png';
+      logo.alt = restaurant.nombre || 'Restaurante';
+    }
+  } catch (error) {
+    console.error('ERROR CARGANDO MI RESTAURANTE:', error);
+  }
+}
+
+async function iniciarFrontend() {
+  const loginScreen = document.getElementById('loginScreen');
+  const dashboard = document.getElementById('dashboard');
+
+  // Evita que el polling use un indicador local obsoleto mientras se valida.
+  localStorage.removeItem('login');
+  window.viendoPedidos = false;
+
+  try {
+    const res = await fetch('/session', { cache: 'no-store' });
+
+    if (res.status === 401) {
+      mostrarLoginSinSesion();
+      return;
     }
 
-    if (dashboard) {
-      dashboard.style.display = "flex";
+    if (!res.ok) {
+      throw new Error('No se pudo validar la sesión');
     }
 
-    // 🔔 Revisar notificaciones únicamente después de entrar al dashboard
+    const data = await res.json();
+
+    if (!data.authenticated) {
+      mostrarLoginSinSesion();
+      return;
+    }
+
+    localStorage.setItem('login', 'true');
+
+    if (loginScreen) loginScreen.style.display = 'none';
+    if (dashboard) dashboard.style.display = 'flex';
+
+    await cargarMiRestaurante();
+    await mostrarInicio();
+
     try {
       if (typeof mostrarModalPushSiCorresponde === 'function') {
         setTimeout(() => {
@@ -147,19 +196,30 @@ window.addEventListener('load', async () => {
         }, 700);
       }
     } catch (error) {
-      console.error("❌ ERROR INICIANDO PUSH:", error);
+      console.error('ERROR INICIANDO PUSH:', error);
     }
+  } catch (error) {
+    console.error('ERROR VALIDANDO SESIÓN:', error);
+    mostrarLoginSinSesion();
   }
+}
 
-});
+window.addEventListener('load', iniciarFrontend);
 
 
 // =====================
 // LOGOUT
 // =====================
-function logout() {
-  localStorage.removeItem("login");
-  location.reload();
+async function logout() {
+  try {
+    await fetch('/logout', { method: 'POST' });
+  } catch (error) {
+    console.error('ERROR CERRANDO SESIÓN:', error);
+  } finally {
+    localStorage.removeItem('login');
+    window.viendoPedidos = false;
+    location.reload();
+  }
 }
 
 
@@ -1732,7 +1792,3 @@ window.cerrarModalPush = function() {
 
   mostrarMensajePush('');
 };
-// =====================
-// INIT
-// =====================
-mostrarInicio();

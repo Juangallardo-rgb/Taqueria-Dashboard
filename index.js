@@ -12,14 +12,24 @@ const path = require('path');
 const webpush = require('web-push');
 
 const stripeConnectRoutes = require('./routes/stripeConnect');
+const {
+  SESSION_COOKIE_NAME,
+  getSessionSettings,
+  createPersistentSessionMiddleware,
+  regenerateSession,
+  saveSession,
+  destroySession
+} = require('./lib/session');
+const { createRestaurantContext } = require('./lib/restaurant-context');
+const { maskSecret } = require('./lib/mask-secret');
+const { registerPublicAssetRoutes } = require('./lib/public-assets');
 
 
 const app = express();
+app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-app.use('/api/stripe/connect', stripeConnectRoutes);
 
 const PORT = process.env.PORT || 4000;
 // 🔐 CLAVES DESDE VARIABLES DE ENTORNO
@@ -59,16 +69,70 @@ console.log("🔐 ENV CHECK:", {
 let wooOrders = [];
 let shipdayOrders = [];
 
-const session = require('express-session');
+app.use(createPersistentSessionMiddleware({ pool }));
 
-app.use(session({
-  secret: 'secreto-super', // puedes cambiarlo luego
-  resave: false,
-  saveUninitialized: true,
-  cookie: {
-    secure: false // ⚠️ en Render está bien así
+const {
+  getSessionRestaurantId,
+  requireAuthenticatedUser,
+  requireSessionRestaurant,
+  requireAdmin,
+  getRestaurantIntegrationConfig,
+  getLegacyRestaurantOneConfig
+} = createRestaurantContext({ pool });
+
+// Stripe conserva su comportamiento actual durante esta fase.
+app.use('/api/stripe/connect', stripeConnectRoutes);
+
+// Toda ruta /admin, incluida la página HTML, exige una sesión administrativa.
+app.use('/admin', requireAdmin);
+
+// Solo estos recursos frontend son públicos.
+registerPublicAssetRoutes(app, __dirname);
+
+app.get('/session', requireSessionRestaurant, (req, res) => {
+  res.json({
+    authenticated: true,
+    user: {
+      id: Number(req.session.user_id),
+      email: req.session.email,
+      rol: req.session.rol,
+      restaurante_id: getSessionRestaurantId(req)
+    }
+  });
+});
+
+app.post('/logout', async (req, res) => {
+  try {
+    await destroySession(req);
+
+    const { cookie } = getSessionSettings(process.env);
+
+    res.clearCookie(SESSION_COOKIE_NAME, {
+      httpOnly: cookie.httpOnly,
+      sameSite: cookie.sameSite,
+      secure: cookie.secure,
+      path: cookie.path
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error destruyendo la sesión:', error.message);
+    res.status(500).json({
+      success: false,
+      message: 'No se pudo cerrar la sesión'
+    });
   }
-}));
+});
+
+app.get('/mi-restaurante', requireSessionRestaurant, (req, res) => {
+  res.json({
+    id: req.restaurant.id,
+    nombre: req.restaurant.nombre,
+    logo_url: req.restaurant.logo_url,
+    abierto: req.restaurant.abierto,
+    activo: req.restaurant.activo
+  });
+});
 
 // 🏠 HOME
 app.get('/', (req, res) => {
@@ -1126,44 +1190,90 @@ app.get('/pedidos-db', async (req, res) => {
 });
 //LOGIN
 app.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+  const email = String(req.body?.email || '').trim();
+  const password = typeof req.body?.password === 'string'
+    ? req.body.password
+    : '';
+
+  if (!email || !password) {
+    return res.status(400).json({
+      success: false,
+      message: 'Correo/usuario y contraseña son requeridos'
+    });
+  }
 
   try {
     const result = await pool.query(
-      'SELECT * FROM usuarios WHERE email = $1 AND password = $2',
+      `SELECT
+         u.id,
+         u.email,
+         u.rol,
+         u.restaurante_id,
+         r.id AS restaurante_existente,
+         r.activo AS restaurante_activo
+       FROM usuarios u
+       LEFT JOIN restaurantes r ON r.id = u.restaurante_id
+       WHERE u.email = $1
+         AND u.password = $2
+       LIMIT 1`,
       [email, password]
     );
 
-    if (result.rows.length > 0) {
-
-      const user = result.rows[0];
-
-      req.session.restaurante_id = user.restaurante_id || 1;
-      req.session.rol = user.rol || 'cliente';
-
-      console.log("LOGIN:", user.email, "ROL:", user.rol);
-
-      res.json({
-        success: true,
-        rol: user.rol
+    if (!result.rows.length) {
+      return res.status(401).json({
+        success: false,
+        message: 'Correo o contraseña incorrectos'
       });
-
-    } else {
-      res.json({ success: false });
     }
+
+    const user = result.rows[0];
+    const restauranteId = Number(user.restaurante_id);
+
+    if (
+      !Number.isInteger(restauranteId) ||
+      restauranteId <= 0 ||
+      !user.restaurante_existente
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: 'El usuario no tiene un restaurante válido asignado'
+      });
+    }
+
+    if (user.restaurante_activo === false) {
+      return res.status(403).json({
+        success: false,
+        message: 'El restaurante asignado está inactivo'
+      });
+    }
+
+    await regenerateSession(req);
+
+    req.session.user_id = Number(user.id);
+    req.session.email = user.email;
+    req.session.rol = user.rol || 'cliente';
+    req.session.restaurante_id = restauranteId;
+
+    await saveSession(req);
+
+    console.log('LOGIN:', user.email, 'ROL:', req.session.rol);
+
+    return res.json({
+      success: true,
+      rol: req.session.rol,
+      restaurante_id: restauranteId
+    });
 
   } catch (error) {
     console.error(error);
-    res.status(500).send('Error login');
+    return res.status(500).json({
+      success: false,
+      message: 'Error iniciando sesión'
+    });
   }
 });
 
 app.get('/admin', (req, res) => {
-
-  if (req.session.rol !== 'admin') {
-    return res.send("No autorizado");
-  }
-
   res.sendFile(__dirname + '/admin.html');
 });
 
@@ -1311,12 +1421,16 @@ app.post('/complete-order/:id', async (req, res) => {
     res.status(500).send("Error");
   }
 });
-app.get('/admin', (req, res) => {
-  res.sendFile(__dirname + '/admin.html');
-});
 app.post('/admin/restaurantes', async (req, res) => {
 
   const { nombre, logo_url, woo_url, consumer_key, consumer_secret, shipday_api } = req.body;
+
+  if (!String(nombre || '').trim()) {
+    return res.status(400).json({
+      success: false,
+      message: 'El nombre del restaurante es requerido'
+    });
+  }
 
   try {
 
@@ -1324,41 +1438,133 @@ app.post('/admin/restaurantes', async (req, res) => {
       `INSERT INTO restaurantes 
       (nombre, logo_url, woo_url, consumer_key, consumer_secret, shipday_api)
       VALUES ($1,$2,$3,$4,$5,$6)`,
-      [nombre, logo_url, woo_url, consumer_key, consumer_secret, shipday_api]
+      [
+        String(nombre).trim(),
+        logo_url || null,
+        woo_url || null,
+        consumer_key || null,
+        consumer_secret || null,
+        shipday_api || null
+      ]
     );
 
-    res.json({ success: true });
+    res.status(201).json({ success: true });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Error');
+    console.error('Error creando restaurante:', err.message);
+    res.status(500).json({
+      success: false,
+      message: 'Error creando restaurante'
+    });
   }
 
 });
 app.get('/admin/restaurantes', async (req, res) => {
 
-  const result = await pool.query(`SELECT * FROM restaurantes ORDER BY id DESC`);
+  try {
+    const result = await pool.query(
+      `SELECT
+         id,
+         nombre,
+         logo_url,
+         woo_url,
+         activo,
+         created_at,
+         updated_at,
+         consumer_key,
+         consumer_secret,
+         shipday_api
+       FROM restaurantes
+       ORDER BY id DESC`
+    );
 
-  res.json(result.rows);
+    res.json(result.rows.map(restaurant => ({
+      id: restaurant.id,
+      nombre: restaurant.nombre,
+      logo_url: restaurant.logo_url,
+      woo_url: restaurant.woo_url,
+      activo: restaurant.activo !== false,
+      created_at: restaurant.created_at,
+      updated_at: restaurant.updated_at,
+      consumer_key: maskSecret(restaurant.consumer_key),
+      consumer_secret: maskSecret(restaurant.consumer_secret),
+      shipday_api: maskSecret(restaurant.shipday_api)
+    })));
+  } catch (error) {
+    console.error('Error listando restaurantes:', error.message);
+    res.status(500).json({
+      success: false,
+      message: 'Error listando restaurantes'
+    });
+  }
 
 });
 app.post('/admin/usuarios', async (req, res) => {
 
   const { email, password, restaurante_id } = req.body;
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  const cleanPassword = typeof password === 'string' ? password : '';
+  const restauranteId = Number(restaurante_id);
+
+  const emailOrUserIsValid =
+    cleanEmail.length >= 3 &&
+    cleanEmail.length <= 254 &&
+    /^[a-z0-9._@+\-]+$/i.test(cleanEmail) &&
+    (!cleanEmail.includes('@') || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail));
+
+  if (!emailOrUserIsValid) {
+    return res.status(400).json({
+      success: false,
+      message: 'El correo o usuario no es válido'
+    });
+  }
+
+  if (cleanPassword.length < 8) {
+    return res.status(400).json({
+      success: false,
+      message: 'La contraseña debe tener al menos 8 caracteres'
+    });
+  }
+
+  if (!Number.isInteger(restauranteId) || restauranteId <= 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'El restaurante seleccionado no es válido'
+    });
+  }
 
   try {
+
+    const restaurantResult = await pool.query(
+      `SELECT id
+       FROM restaurantes
+       WHERE id = $1
+         AND activo IS NOT FALSE
+       LIMIT 1`,
+      [restauranteId]
+    );
+
+    if (!restaurantResult.rows.length) {
+      return res.status(400).json({
+        success: false,
+        message: 'El restaurante no existe o está inactivo'
+      });
+    }
 
     await pool.query(
       `INSERT INTO usuarios (email, password, restaurante_id)
        VALUES ($1, $2, $3)`,
-      [email, password, restaurante_id]
+      [cleanEmail, cleanPassword, restauranteId]
     );
 
-    res.json({ success: true });
+    res.status(201).json({ success: true });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).send('Error');
+    console.error('Error creando usuario:', err.message);
+    res.status(500).json({
+      success: false,
+      message: 'Error creando usuario'
+    });
   }
 
 });
@@ -2019,5 +2225,4 @@ app.get('/test-db', async (req, res) => {
   }
 
 }); 
-app.use(express.static(__dirname));
 

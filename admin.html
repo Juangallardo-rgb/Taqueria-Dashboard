@@ -41,7 +41,7 @@
   </style>
 </head>
 
-<body>
+<body style="display:none;">
 
 <h1>Panel Admin</h1>
 
@@ -201,8 +201,35 @@ async function cargarUsuarios() {
 // INIT
 /////////////////////////////
 
-cargarRestaurantes();
-cargarUsuarios();
+async function iniciarAdmin() {
+  try {
+    const res = await fetch('/session', { cache: 'no-store' });
+
+    if (!res.ok) {
+      window.location.replace('/');
+      return;
+    }
+
+    const data = await res.json();
+
+    if (!data.authenticated || data.user?.rol !== 'admin') {
+      document.body.innerHTML = '<h1>Acceso denegado</h1><p>Se requiere una sesión administrativa.</p>';
+      document.body.style.display = 'block';
+      return;
+    }
+
+    document.body.style.display = 'block';
+    await Promise.all([
+      cargarRestaurantes(),
+      cargarUsuarios()
+    ]);
+  } catch (error) {
+    document.body.innerHTML = '<h1>Acceso denegado</h1><p>No se pudo validar la sesión.</p>';
+    document.body.style.display = 'block';
+  }
+}
+
+iniciarAdmin();
 
 </script>
 
