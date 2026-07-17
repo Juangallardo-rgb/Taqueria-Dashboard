@@ -62,6 +62,27 @@ function toPositiveInteger(value) {
   return numberValue;
 }
 
+function requireAdminRestaurantAccess(req, res, next) {
+  const sessionRestaurantId = toPositiveInteger(req.session?.restaurante_id);
+  const pathRestaurantId = toPositiveInteger(req.params.restauranteId);
+
+  if (!req.session?.user_id || req.session?.rol !== "admin") {
+    return res.status(403).json({
+      success: false,
+      error: "Se requiere una sesión administrativa",
+    });
+  }
+
+  if (!pathRestaurantId || sessionRestaurantId !== pathRestaurantId) {
+    return res.status(403).json({
+      success: false,
+      error: "No puedes administrar Stripe de otro restaurante",
+    });
+  }
+
+  return next();
+}
+
 async function getRestauranteById(restauranteId) {
   const result = await pool.query(
     `
@@ -101,7 +122,7 @@ async function getStripeAccountStatus(stripeAccountId) {
  *
  * GET /api/stripe/connect/authorize/1
  */
-router.get("/authorize/:restauranteId", async (req, res) => {
+router.get("/authorize/:restauranteId", requireAdminRestaurantAccess, async (req, res) => {
   try {
     const restauranteId = toPositiveInteger(req.params.restauranteId);
 
@@ -373,7 +394,7 @@ router.get("/callback", async (req, res) => {
  *
  * GET /api/stripe/connect/status/1
  */
-router.get("/status/:restauranteId", async (req, res) => {
+router.get("/status/:restauranteId", requireAdminRestaurantAccess, async (req, res) => {
   try {
     const restauranteId = toPositiveInteger(req.params.restauranteId);
 
@@ -464,7 +485,7 @@ router.get("/status/:restauranteId", async (req, res) => {
  *
  * POST /api/stripe/connect/test-payment/1
  */
-router.post("/test-payment/:restauranteId", async (req, res) => {
+router.post("/test-payment/:restauranteId", requireAdminRestaurantAccess, async (req, res) => {
   try {
     const restauranteId = toPositiveInteger(req.params.restauranteId);
 
@@ -703,9 +724,8 @@ const paymentIntent = await stripe.paymentIntents.create(
         $9,
         NOW()
       )
-      ON CONFLICT (woo_order_id)
+      ON CONFLICT (restaurante_id, woo_order_id)
       DO UPDATE SET
-        restaurante_id = EXCLUDED.restaurante_id,
         total = EXCLUDED.total,
         stripe_payment_intent_id = EXCLUDED.stripe_payment_intent_id,
         stripe_account_id = EXCLUDED.stripe_account_id,
@@ -966,6 +986,7 @@ router.post("/refund", async (req, res) => {
         stripe_refunded_at = NOW(),
         stripe_refund_error = NULL
       WHERE id = $6
+      AND restaurante_id = $7
       `,
       [
         isFullyRefunded,
@@ -974,6 +995,7 @@ router.post("/refund", async (req, res) => {
         refund.status || "succeeded",
         newTotalRefundedCents,
         pedido.id,
+        pedido.restaurante_id,
       ]
     );
 

@@ -1,6 +1,11 @@
 function convertirFecha(timestamp) {
   if (!timestamp) return null;
-  return new Date(Number(timestamp));
+  const numericTimestamp = Number(timestamp);
+  const dateValue = Number.isFinite(numericTimestamp)
+    ? (numericTimestamp < 1e12 ? numericTimestamp * 1000 : numericTimestamp)
+    : timestamp;
+  const date = new Date(dateValue);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 require('dotenv').config();
 const pool = require('./database');
@@ -9,6 +14,7 @@ const axios = require('axios');
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const crypto = require('crypto');
 const webpush = require('web-push');
 
 const stripeConnectRoutes = require('./routes/stripeConnect');
@@ -23,20 +29,33 @@ const {
 const { createRestaurantContext } = require('./lib/restaurant-context');
 const { maskSecret } = require('./lib/mask-secret');
 const { registerPublicAssetRoutes } = require('./lib/public-assets');
+const { createOperationalConfig } = require('./lib/operational-config');
+const {
+  verifyWooWebhookSignature,
+  safeEqualText,
+  verifyShipdaySecret
+} = require('./lib/webhook-security');
+const {
+  detectarTipoPedidoWoo,
+  buildWooOrderItems,
+  getWooDeliveryAddress,
+  shouldIgnoreWooOrder
+} = require('./lib/order-utils');
 
 
 const app = express();
 app.set('trust proxy', 1);
 app.use(cors());
-app.use(express.json());
+app.use(express.json({
+  verify: (req, res, buffer) => {
+    req.rawBody = Buffer.from(buffer);
+  }
+}));
 app.use(express.urlencoded({ extended: true }));
 
 const PORT = process.env.PORT || 4000;
-// 🔐 CLAVES DESDE VARIABLES DE ENTORNO
-const WOO_URL = process.env.WOO_URL;
-const CONSUMER_KEY = process.env.CONSUMER_KEY;
-const CONSUMER_SECRET = process.env.CONSUMER_SECRET;
-const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
+const LEGACY_RESTAURANT_ONE_ENABLED =
+  String(process.env.ENABLE_LEGACY_RESTAURANT_1 || '').toLowerCase() === 'true';
 
 // 🔔 PUSH NOTIFICATIONS
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
@@ -55,14 +74,19 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY && VAPID_SUBJECT) {
   console.warn("⚠️ Faltan variables VAPID para notificaciones push");
 }
 
-if (!WEBHOOK_SECRET) console.warn("⚠️ Falta WEBHOOK_SECRET en variables de entorno");
+if (LEGACY_RESTAURANT_ONE_ENABLED) {
+  if (!process.env.WEBHOOK_SECRET) {
+    console.warn("⚠️ Falta WEBHOOK_SECRET para compatibilidad de restaurante 1");
+  }
 
-console.log("🔐 ENV CHECK:", {
-  WOO_URL: WOO_URL || "NO CONFIGURADO",
-  CONSUMER_KEY: CONSUMER_KEY ? "CONFIGURADO" : "NO CONFIGURADO",
-  CONSUMER_SECRET: CONSUMER_SECRET ? "CONFIGURADO" : "NO CONFIGURADO",
-  WEBHOOK_SECRET: WEBHOOK_SECRET ? "CONFIGURADO" : "NO CONFIGURADO"
-});
+  console.log("🔐 LEGACY RESTAURANTE 1:", {
+    enabled: true,
+    WOO_URL: process.env.WOO_URL ? "CONFIGURADO" : "NO CONFIGURADO",
+    CONSUMER_KEY: process.env.CONSUMER_KEY ? "CONFIGURADO" : "NO CONFIGURADO",
+    CONSUMER_SECRET: process.env.CONSUMER_SECRET ? "CONFIGURADO" : "NO CONFIGURADO",
+    WEBHOOK_SECRET: process.env.WEBHOOK_SECRET ? "CONFIGURADO" : "NO CONFIGURADO"
+  });
+}
 
 
 // 🧠 MEMORIA
@@ -73,12 +97,46 @@ app.use(createPersistentSessionMiddleware({ pool }));
 
 const {
   getSessionRestaurantId,
-  requireAuthenticatedUser,
   requireSessionRestaurant,
   requireAdmin,
-  getRestaurantIntegrationConfig,
-  getLegacyRestaurantOneConfig
+  getRestaurantIntegrationConfig
 } = createRestaurantContext({ pool });
+
+const {
+  getOperationalRestaurantConfig,
+  resolveOperationalRestaurantByToken,
+  getLegacyRestaurantOneOperationalConfig
+} = createOperationalConfig({
+  pool,
+  getRestaurantIntegrationConfig
+});
+
+function sendOperationalError(res, error) {
+  return res.status(error.statusCode || 500).json({
+    success: false,
+    message: error.message || 'Error de configuración operativa',
+    code: error.code || 'OPERATIONAL_ERROR'
+  });
+}
+
+async function requireWooOperationalConfig(req, res, next) {
+  try {
+    req.operationalConfig = await getOperationalRestaurantConfig(
+      req.restaurant.id,
+      { required: ['woo_url', 'consumer_key', 'consumer_secret'] }
+    );
+    next();
+  } catch (error) {
+    return sendOperationalError(res, error);
+  }
+}
+
+function getWooAxiosAuth(config) {
+  return {
+    username: config.consumer_key,
+    password: config.consumer_secret
+  };
+}
 
 // Stripe conserva su comportamiento actual durante esta fase.
 app.use('/api/stripe/connect', stripeConnectRoutes);
@@ -144,18 +202,8 @@ app.get('/dashboard', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-app.post('/webhook-product', async (req, res) => {
+async function processWooProductWebhook(req, res, restauranteId) {
   try {
-    const secret = req.query.secret;
-
-    if (!WEBHOOK_SECRET || secret !== WEBHOOK_SECRET) {
-      console.log("⛔ WEBHOOK PRODUCTO RECHAZADO: secret inválido");
-      return res.status(401).json({
-        success: false,
-        message: "No autorizado"
-      });
-    }
-
     const product = req.body;
     const topic = req.headers['x-wc-webhook-topic'] || '';
 
@@ -177,7 +225,6 @@ app.post('/webhook-product', async (req, res) => {
       });
     }
 
-    const restauranteId = 1;
     const wooProductId = String(product.id);
 
     const imagen = product.images && product.images.length
@@ -255,12 +302,59 @@ app.post('/webhook-product', async (req, res) => {
       error: error.message
     });
   }
+}
+
+app.post('/webhooks/woo/:webhookToken/product', async (req, res) => {
+  try {
+    const config = await resolveOperationalRestaurantByToken(
+      req.params.webhookToken,
+      { required: ['woo_webhook_secret'] }
+    );
+
+    const validSignature = verifyWooWebhookSignature(
+      req.rawBody,
+      config.woo_webhook_secret,
+      req.headers['x-wc-webhook-signature']
+    );
+
+    if (!validSignature) {
+      return res.status(401).json({ success: false, message: 'Firma inválida' });
+    }
+
+    return processWooProductWebhook(req, res, config.id);
+  } catch (error) {
+    return sendOperationalError(res, error);
+  }
 });
 
-
-app.get('/productos-db', async (req, res) => {
+app.post('/webhook-product', async (req, res) => {
   try {
-    const restaurante_id = req.session?.restaurante_id || 1;
+    const config = await getLegacyRestaurantOneOperationalConfig({
+      required: ['woo_webhook_secret']
+    });
+
+    const validSignature = verifyWooWebhookSignature(
+      req.rawBody,
+      config.woo_webhook_secret,
+      req.headers['x-wc-webhook-signature']
+    );
+    const validLegacyQuerySecret =
+      safeEqualText(req.query.secret, config.woo_webhook_secret) ||
+      safeEqualText(req.query.secret, config.webhook_token);
+
+    if (!validSignature && !validLegacyQuerySecret) {
+      return res.status(401).json({ success: false, message: 'No autorizado' });
+    }
+
+    return processWooProductWebhook(req, res, 1);
+  } catch (error) {
+    return sendOperationalError(res, error);
+  }
+});
+
+app.get('/productos-db', requireSessionRestaurant, async (req, res) => {
+  try {
+    const restaurante_id = req.restaurant.id;
 
     const result = await pool.query(
       `SELECT 
@@ -301,14 +395,17 @@ app.get('/productos-db', async (req, res) => {
 // ===============================
 // 🔥 GET WOO ORDERS (OPTIMIZADO)
 // ===============================
-app.get('/woo-orders', async (req, res) => { 
-  try { 
+app.get('/woo-orders', requireSessionRestaurant, async (req, res) => {
+  try {
+    const config = await getOperationalRestaurantConfig(req.restaurant.id, {
+      required: ['woo_url', 'consumer_key', 'consumer_secret']
+    });
     const response = await axios.get(
-      `${WOO_URL}/wp-json/wc/v3/orders?per_page=20`,
+      `${config.woo_url}/wp-json/wc/v3/orders?per_page=20`,
       { 
         auth: { 
-          username: CONSUMER_KEY, 
-          password: CONSUMER_SECRET 
+          username: config.consumer_key,
+          password: config.consumer_secret
         },
         timeout: 30000,
         headers: {
@@ -319,9 +416,7 @@ app.get('/woo-orders', async (req, res) => {
     );
 
     const wooOrders = response.data.map(order => { 
-      const esPickup = order.shipping_lines?.some(
-        l => l.method_id === 'local_pickup'
-      ); 
+      const tipoPedido = detectarTipoPedidoWoo(order);
       
       return { 
         id: order.id, 
@@ -330,7 +425,7 @@ app.get('/woo-orders', async (req, res) => {
         customer_name: `${(order.billing?.first_name || '')} ${(order.billing?.last_name || '')}`.trim() || 'Cliente', 
         direccion: order.shipping?.address_1 || '', 
         ciudad: order.shipping?.city || '', 
-        estado_envio: esPickup ? 'pickup' : 'delivery', 
+        estado_envio: tipoPedido,
         created_at: order.date_created, 
         items: (order.line_items || []).map(item => { 
           const extras = (item.meta_data || []) 
@@ -349,6 +444,7 @@ app.get('/woo-orders', async (req, res) => {
     res.json(wooOrders); 
 
   } catch (error) { 
+    if (error.statusCode) return sendOperationalError(res, error);
     console.error("❌ ERROR WOO MESSAGE:", error.message);
     console.error("❌ ERROR WOO CODE:", error.code);
     console.error("❌ ERROR WOO STATUS:", error.response?.status);
@@ -386,82 +482,45 @@ async function enviarPushNuevoPedido(restauranteId, order) {
     };
   }
 
-  let tipoPedido = 'Delivery';
+  let tipoPedido = detectarTipoPedidoWoo(order) === 'pickup'
+    ? 'Pickup'
+    : 'Delivery';
 
-try {
-  const tipoRes = await pool.query(
-    `SELECT 
-       p.tipo_pedido,
-       d.order_number
-     FROM pedidos p
-     LEFT JOIN deliveries d
-       ON d.order_number::text = p.woo_order_id::text
-     WHERE p.restaurante_id = $1
-       AND p.woo_order_id::text = $2
-     LIMIT 1`,
-    [restauranteId, String(order.id)]
-  );
-
-  const infoPedido = tipoRes.rows[0];
-
-  if (infoPedido?.order_number) {
-    tipoPedido = 'Delivery';
-  } else if (String(infoPedido?.tipo_pedido || '').toLowerCase() === 'delivery') {
-    tipoPedido = 'Delivery';
-  } else if (String(infoPedido?.tipo_pedido || '').toLowerCase() === 'pickup') {
-    tipoPedido = 'Pickup';
-  } else {
-    const shippingText = (order.shipping_lines || [])
-      .map(line => `${line.method_id || ''} ${line.method_title || ''}`)
-      .join(' ')
-      .toLowerCase();
-
-    const tieneDireccionShipping = !!(
-      order.shipping?.address_1 ||
-      order.shipping?.city ||
-      order.shipping?.postcode
+  try {
+    const tipoRes = await pool.query(
+      `SELECT
+         p.tipo_pedido,
+         d.order_number
+       FROM pedidos p
+       LEFT JOIN deliveries d
+         ON d.restaurante_id = p.restaurante_id
+        AND d.order_number::text = p.woo_order_id::text
+       WHERE p.restaurante_id = $1
+         AND p.woo_order_id::text = $2
+       LIMIT 1`,
+      [restauranteId, String(order.id)]
     );
 
-    const pareceDelivery =
-      shippingText.includes('delivery') ||
-      shippingText.includes('shipday') ||
-      shippingText.includes('local_delivery') ||
-      shippingText.includes('envio') ||
-      shippingText.includes('envío') ||
-      tieneDireccionShipping;
+    const infoPedido = tipoRes.rows[0];
 
-    const parecePickup =
-      shippingText.includes('local_pickup') ||
-      shippingText.includes('pickup') ||
-      shippingText.includes('pick up') ||
-      shippingText.includes('recoger');
-
-    tipoPedido = pareceDelivery ? 'Delivery' : (parecePickup ? 'Pickup' : 'Delivery');
+    if (
+      infoPedido?.order_number ||
+      String(infoPedido?.tipo_pedido || '').toLowerCase() === 'delivery'
+    ) {
+      tipoPedido = 'Delivery';
+    } else if (String(infoPedido?.tipo_pedido || '').toLowerCase() === 'pickup') {
+      tipoPedido = 'Pickup';
+    }
+  } catch (tipoError) {
+    console.error("⚠️ ERROR DETECTANDO TIPO DE PEDIDO PARA PUSH:", tipoError.message);
   }
-
-} catch (tipoError) {
-  console.error("⚠️ ERROR DETECTANDO TIPO DE PEDIDO PARA PUSH:", tipoError.message);
-
-  const shippingText = (order.shipping_lines || [])
-    .map(line => `${line.method_id || ''} ${line.method_title || ''}`)
-    .join(' ')
-    .toLowerCase();
-
-  const parecePickup =
-    shippingText.includes('local_pickup') ||
-    shippingText.includes('pickup') ||
-    shippingText.includes('pick up') ||
-    shippingText.includes('recoger');
-
-  tipoPedido = parecePickup ? 'Pickup' : 'Delivery';
-}
 
   const payload = JSON.stringify({
     title: '🔔 Nuevo pedido recibido',
     body: `Pedido #${order.id} • ${tipoPedido} • Total $${Number(order.total || 0).toFixed(2)}`,
     url: '/',
     orderId: order.id,
-    tag: `pedido-${order.id}`
+    tag: `pedido-${restauranteId}-${order.id}`
   });
 
   let enviados = 0;
@@ -501,8 +560,9 @@ try {
           `UPDATE push_subscriptions
            SET activo = false,
                updated_at = NOW()
-           WHERE id = $1`,
-          [dispositivo.id]
+           WHERE id = $1
+             AND restaurante_id = $2`,
+          [dispositivo.id, restauranteId]
         );
 
         desactivados++;
@@ -528,10 +588,9 @@ try {
 // ===============================
 // 🔥 WEBHOOK WOO (CORREGIDO)
 // ===============================
-app.post('/webhook-order', async (req, res) => {
+async function processWooOrderWebhook(req, res, restauranteId) {
 
   const order = req.body;
-  const restauranteId = 1;
 
   if (!order || !order.id) {
     console.log("⚠️ WOO WEBHOOK recibido sin order.id");
@@ -541,41 +600,29 @@ app.post('/webhook-order', async (req, res) => {
     });
   }
 
+  if (shouldIgnoreWooOrder(order)) {
+    return res.status(200).json({
+      success: true,
+      ignored: true,
+      status: order.status
+    });
+  }
+
+  // `pending` se conserva: Stripe/Woo puede publicar la orden antes de completar
+  // el pago y las actualizaciones posteriores mantienen el mismo registro.
+
   console.log("🔥 WOO WEBHOOK:", order.id);
   invalidarCachePedidos(restauranteId);
 
   try {
 
-    const items = (order.line_items || []).map(i => {
-
-      const extras = (i.meta_data || [])
-        .filter(m => m.value && m.value !== '')
-        .map(m => `${m.key}: ${m.value}`)
-        .join(', ');
-
-      return {
-        nombre: `${i.name}${extras ? ` (${extras})` : ''}`,
-        cantidad: i.quantity
-      };
-    });
-
-
-    const shippingText = (order.shipping_lines || [])
-  .map(line => `${line.method_id || ''} ${line.method_title || ''}`)
-  .join(' ')
-  .toLowerCase();
-
-const esPickup =
-  shippingText.includes('local_pickup') ||
-  shippingText.includes('pickup') ||
-  shippingText.includes('pick up') ||
-  shippingText.includes('recoger');
-
-const tipoPedido = esPickup ? 'pickup' : 'delivery';
-
-const deliveryAddress = order.shipping?.address_1 || order.billing?.address_1 || '';
-const deliveryCity = order.shipping?.city || order.billing?.city || '';
-const deliveryPostcode = order.shipping?.postcode || order.billing?.postcode || '';
+    const items = buildWooOrderItems(order);
+    const tipoPedido = detectarTipoPedidoWoo(order);
+    const {
+      deliveryAddress,
+      deliveryCity,
+      deliveryPostcode
+    } = getWooDeliveryAddress(order);
     // ======================================================
     // ✅ GUARDAR ORDEN COMO YA FUNCIONA ACTUALMENTE
     // No se toca items ni refund_items
@@ -597,7 +644,7 @@ const deliveryPostcode = order.shipping?.postcode || order.billing?.postcode || 
      delivery_postcode
    )
    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-   ON CONFLICT (woo_order_id)
+   ON CONFLICT (restaurante_id, woo_order_id)
    DO UPDATE SET
      estado = EXCLUDED.estado,
      total = EXCLUDED.total,
@@ -708,32 +755,75 @@ const deliveryPostcode = order.shipping?.postcode || order.billing?.postcode || 
 
     res.sendStatus(500);
   }
+}
 
+app.post('/webhooks/woo/:webhookToken/order', async (req, res) => {
+  try {
+    const config = await resolveOperationalRestaurantByToken(
+      req.params.webhookToken,
+      { required: ['woo_webhook_secret'] }
+    );
+
+    if (!verifyWooWebhookSignature(
+      req.rawBody,
+      config.woo_webhook_secret,
+      req.headers['x-wc-webhook-signature']
+    )) {
+      return res.status(401).json({ success: false, message: 'Firma inválida' });
+    }
+
+    return processWooOrderWebhook(req, res, config.id);
+  } catch (error) {
+    return sendOperationalError(res, error);
+  }
+});
+
+app.post('/webhook-order', async (req, res) => {
+  try {
+    const config = await getLegacyRestaurantOneOperationalConfig({
+      required: ['woo_webhook_secret']
+    });
+
+    if (!verifyWooWebhookSignature(
+      req.rawBody,
+      config.woo_webhook_secret,
+      req.headers['x-wc-webhook-signature']
+    )) {
+      return res.status(401).json({ success: false, message: 'Firma inválida' });
+    }
+
+    return processWooOrderWebhook(req, res, 1);
+  } catch (error) {
+    return sendOperationalError(res, error);
+  }
 });
 // ===============================
 // 🚚 WEBHOOK SHIPDAY
 // ===============================
-app.post('/webhook-shipday', async (req, res) => {
+async function processShipdayWebhook(req, res, restauranteId, config) {
 
-  const data = req.body;
-  const restauranteId = 1;
+  const data = req.body || {};
 
   const driverName = data.carrier?.name || null;
   const orderNumber = data.order?.order_number || null;
 
-  function convertirFecha(timestamp) {
-    if (!timestamp) return null;
-    return new Date(Number(timestamp));
+  if (orderNumber === null || orderNumber === undefined || orderNumber === '') {
+    return res.status(400).json({
+      success: false,
+      message: 'Shipday no incluyó orderNumber'
+    });
   }
+
+  const normalizedOrderNumber = String(orderNumber);
 
   try {
 
     // 🔥 1. GUARDAR DELIVERY
     await pool.query(
       `INSERT INTO deliveries 
-      (order_number, driver_name, status, delivery_cost, tracking_url, picked_up_at, delivered_at)
-      VALUES ($1,$2,$3,$4,$5,$6,$7)
-      ON CONFLICT (order_number)
+      (restaurante_id, order_number, driver_name, status, delivery_cost, tracking_url, picked_up_at, delivered_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      ON CONFLICT (restaurante_id, order_number)
       DO UPDATE SET
         driver_name = COALESCE(EXCLUDED.driver_name, deliveries.driver_name),
         status = EXCLUDED.status,
@@ -742,11 +832,12 @@ app.post('/webhook-shipday', async (req, res) => {
         picked_up_at = EXCLUDED.picked_up_at,
         delivered_at = EXCLUDED.delivered_at`,
       [
-        String(orderNumber),
+        restauranteId,
+        normalizedOrderNumber,
         driverName,
-        data.order_status,
-        data.order?.delivery_fee || null,
-        data.trackingUrl,
+        data.order_status || data.status || null,
+        data.order?.delivery_fee ?? null,
+        data.trackingUrl || data.tracking_url || data.order?.tracking_url || null,
         convertirFecha(data.order?.pickedup_time),
         convertirFecha(data.order?.delivery_time)
       ]
@@ -757,18 +848,18 @@ app.post('/webhook-shipday', async (req, res) => {
     console.log("🚚 SHIPDAY OK (delivery actualizado)");
 
     // 🔥 2. TRAER PEDIDO COMPLETO DESDE WOO
-    if (orderNumber) {
+    if (normalizedOrderNumber) {
 
       setTimeout(async () => {
 
         try {
 
           const wooRes = await axios.get(
-            `${WOO_URL}/wp-json/wc/v3/orders/${orderNumber}`,
+            `${config.woo_url}/wp-json/wc/v3/orders/${normalizedOrderNumber}`,
             {
               auth: {
-                username: CONSUMER_KEY,
-                password: CONSUMER_SECRET
+                username: config.consumer_key,
+                password: config.consumer_secret
               }
             }
           );
@@ -780,22 +871,16 @@ app.post('/webhook-shipday', async (req, res) => {
             return;
           }
 
-          const items = order.line_items.map(i => {
-
-            const extras = (i.meta_data || [])
-              .filter(m => m.value && m.value !== '')
-              .map(m => `${m.key}: ${m.value}`)
-              .join(', ');
-
-            return {
-              nombre: `${i.name}${extras ? ` (${extras})` : ''}`,
-              cantidad: i.quantity
-            };
-          });
-
-          const deliveryAddress = order.shipping?.address_1 || order.billing?.address_1 || '';
-          const deliveryCity = order.shipping?.city || order.billing?.city || '';
-          const deliveryPostcode = order.shipping?.postcode || order.billing?.postcode || '';
+          const items = buildWooOrderItems(order);
+          const {
+            deliveryAddress,
+            deliveryCity,
+            deliveryPostcode
+          } = getWooDeliveryAddress(order);
+          const tipoPedidoWoo = detectarTipoPedidoWoo(order);
+          const tipoPedido = tipoPedidoWoo === 'delivery'
+            ? tipoPedidoWoo
+            : 'delivery';
 
           // 🔥 3. INSERTAR / ACTUALIZAR PEDIDO COMO DELIVERY
           await pool.query(
@@ -815,8 +900,8 @@ app.post('/webhook-shipday', async (req, res) => {
               delivery_postcode,
               created_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'delivery', $9, $10, $11, NOW())
-            ON CONFLICT (woo_order_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+            ON CONFLICT (restaurante_id, woo_order_id)
             DO UPDATE SET
               estado = EXCLUDED.estado,
               total = EXCLUDED.total,
@@ -824,7 +909,7 @@ app.post('/webhook-shipday', async (req, res) => {
               customer_phone = EXCLUDED.customer_phone,
               items = EXCLUDED.items,
               refund_items = EXCLUDED.refund_items,
-              tipo_pedido = 'delivery',
+              tipo_pedido = EXCLUDED.tipo_pedido,
               delivery_address = EXCLUDED.delivery_address,
               delivery_city = EXCLUDED.delivery_city,
               delivery_postcode = EXCLUDED.delivery_postcode`,
@@ -837,6 +922,7 @@ app.post('/webhook-shipday', async (req, res) => {
               order.billing?.phone || '',
               JSON.stringify(items),
               JSON.stringify(order.line_items || []),
+              tipoPedido,
               deliveryAddress,
               deliveryCity,
               deliveryPostcode
@@ -929,14 +1015,61 @@ app.post('/webhook-shipday', async (req, res) => {
     res.sendStatus(500);
   }
 
+}
+
+app.post('/webhooks/shipday/:webhookToken', async (req, res) => {
+  try {
+    const config = await resolveOperationalRestaurantByToken(
+      req.params.webhookToken,
+      {
+        required: [
+          'shipday_webhook_secret',
+          'woo_url',
+          'consumer_key',
+          'consumer_secret'
+        ]
+      }
+    );
+
+    if (!verifyShipdaySecret(req, config.shipday_webhook_secret)) {
+      return res.status(401).json({ success: false, message: 'Secreto inválido' });
+    }
+
+    return processShipdayWebhook(req, res, config.id, config);
+  } catch (error) {
+    return sendOperationalError(res, error);
+  }
+});
+
+app.post('/webhook-shipday', async (req, res) => {
+  try {
+    const config = await getLegacyRestaurantOneOperationalConfig({
+      required: [
+        'shipday_webhook_secret',
+        'woo_url',
+        'consumer_key',
+        'consumer_secret'
+      ]
+    });
+
+    if (!verifyShipdaySecret(req, config.shipday_webhook_secret)) {
+      return res.status(401).json({ success: false, message: 'Secreto inválido' });
+    }
+
+    return processShipdayWebhook(req, res, 1, config);
+  } catch (error) {
+    return sendOperationalError(res, error);
+  }
 });
 
 
 // ===============================
 // 📡 VER SHIPDAY
 // ===============================
-app.get('/shipday-live', (req, res) => {
-  res.json(shipdayOrders);
+app.get('/shipday-live', requireSessionRestaurant, (req, res) => {
+  res.json(shipdayOrders.filter(order => (
+    Number(order.restaurante_id) === req.restaurant.id
+  )));
 });
 
 // ======================================================
@@ -953,8 +1086,8 @@ function invalidarCachePedidos(restauranteId) {
 // ===============================
 // 🧩 UNIÓN FINAL CON CACHE
 // ===============================
-app.get('/orders-complete', async (req, res) => {
-  const restaurante_id = req.session?.restaurante_id || 1;
+app.get('/orders-complete', requireSessionRestaurant, async (req, res) => {
+  const restaurante_id = req.restaurant.id;
   const cacheKey = String(restaurante_id);
   const ahora = Date.now();
 
@@ -995,8 +1128,8 @@ app.get('/orders-complete', async (req, res) => {
         d.driver_name,
 
         CASE 
-        WHEN p.tipo_pedido = 'delivery' THEN 'delivery'
         WHEN d.order_number IS NOT NULL THEN 'delivery'
+        WHEN p.tipo_pedido = 'delivery' THEN 'delivery'
         ELSE 'pickup'
       END AS estado_envio,
 
@@ -1007,7 +1140,8 @@ app.get('/orders-complete', async (req, res) => {
 
       FROM pedidos p
       LEFT JOIN deliveries d
-        ON d.order_number::text = p.woo_order_id::text
+        ON d.restaurante_id = p.restaurante_id
+       AND d.order_number::text = p.woo_order_id::text
 
       WHERE p.restaurante_id = $1
 
@@ -1038,9 +1172,9 @@ app.get('/orders-complete', async (req, res) => {
 });
 
 
-app.get('/orders-latest', async (req, res) => {
+app.get('/orders-latest', requireSessionRestaurant, async (req, res) => {
   try {
-    const restauranteId = req.session?.restaurante_id || 1;
+    const restauranteId = req.restaurant.id;
 
     const result = await pool.query(
       `SELECT id, woo_order_id, created_at
@@ -1067,15 +1201,13 @@ app.get('/orders-latest', async (req, res) => {
 // ===============================
 
 // 📦 OBTENER PRODUCTOS
-app.get('/products', async (req, res) => {
+app.get('/products', requireSessionRestaurant, requireWooOperationalConfig, async (req, res) => {
   try {
+    const config = req.operationalConfig;
     const response = await axios.get(
-      `${WOO_URL}/wp-json/wc/v3/products?per_page=100&_=${Date.now()}`,
+      `${config.woo_url}/wp-json/wc/v3/products?per_page=100&_=${Date.now()}`,
       {
-        auth: {
-          username: CONSUMER_KEY,
-          password: CONSUMER_SECRET
-        }
+        auth: getWooAxiosAuth(config)
       }
     );
 
@@ -1089,16 +1221,14 @@ app.get('/products', async (req, res) => {
 
 
 // ➕ CREAR PRODUCTO
-app.post('/products', async (req, res) => {
+app.post('/products', requireSessionRestaurant, requireWooOperationalConfig, async (req, res) => {
   try {
+    const config = req.operationalConfig;
     const response = await axios.post(
-      `${WOO_URL}/wp-json/wc/v3/products`,
+      `${config.woo_url}/wp-json/wc/v3/products`,
       req.body,
       {
-        auth: {
-          username: CONSUMER_KEY,
-          password: CONSUMER_SECRET
-        }
+        auth: getWooAxiosAuth(config)
       }
     );
 
@@ -1111,16 +1241,14 @@ app.post('/products', async (req, res) => {
 });
 
 // ✏️ EDITAR PRODUCTO
-app.put('/products/:id', async (req, res) => {
+app.put('/products/:id', requireSessionRestaurant, requireWooOperationalConfig, async (req, res) => {
   try {
+    const config = req.operationalConfig;
     const response = await axios.put(
-      `${WOO_URL}/wp-json/wc/v3/products/${req.params.id}`,
+      `${config.woo_url}/wp-json/wc/v3/products/${req.params.id}`,
       req.body,
       {
-        auth: {
-          username: CONSUMER_KEY,
-          password: CONSUMER_SECRET
-        }
+        auth: getWooAxiosAuth(config)
       }
     );
 
@@ -1134,15 +1262,13 @@ app.put('/products/:id', async (req, res) => {
 
 
 // ❌ ELIMINAR PRODUCTO
-app.delete('/products/:id', async (req, res) => {
+app.delete('/products/:id', requireSessionRestaurant, requireWooOperationalConfig, async (req, res) => {
   try {
+    const config = req.operationalConfig;
     const response = await axios.delete(
-      `${WOO_URL}/wp-json/wc/v3/products/${req.params.id}?force=true`,
+      `${config.woo_url}/wp-json/wc/v3/products/${req.params.id}?force=true`,
       {
-        auth: {
-          username: CONSUMER_KEY,
-          password: CONSUMER_SECRET
-        }
+        auth: getWooAxiosAuth(config)
       }
     );
 
@@ -1156,15 +1282,13 @@ app.delete('/products/:id', async (req, res) => {
 // ===============================
 // 📂 CATEGORÍAS
 // ===============================
-app.get('/categories', async (req, res) => {
+app.get('/categories', requireSessionRestaurant, requireWooOperationalConfig, async (req, res) => {
   try {
+    const config = req.operationalConfig;
     const response = await axios.get(
-      `${WOO_URL}/wp-json/wc/v3/products/categories`,
+      `${config.woo_url}/wp-json/wc/v3/products/categories`,
       {
-        auth: {
-          username: CONSUMER_KEY,
-          password: CONSUMER_SECRET
-        }
+        auth: getWooAxiosAuth(config)
       }
     );
 
@@ -1175,10 +1299,14 @@ app.get('/categories', async (req, res) => {
     res.status(500).send('Error categorias');
   }
 });
-app.get('/pedidos-db', async (req, res) => {
+app.get('/pedidos-db', requireSessionRestaurant, async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT * FROM pedidos ORDER BY created_at DESC"
+      `SELECT *
+       FROM pedidos
+       WHERE restaurante_id = $1
+       ORDER BY created_at DESC`,
+      [req.restaurant.id]
     );
 
     res.json(result.rows);
@@ -1277,37 +1405,43 @@ app.get('/admin', (req, res) => {
   res.sendFile(__dirname + '/admin.html');
 });
 
-app.get('/estado-restaurante', async (req, res) => {
+app.get('/estado-restaurante', requireSessionRestaurant, async (req, res) => {
 
   const result = await pool.query(
-    'SELECT abierto FROM restaurantes WHERE id = 1'
+    'SELECT abierto FROM restaurantes WHERE id = $1',
+    [req.restaurant.id]
   );
 
   res.json(result.rows[0]);
 
 });
-app.post('/toggle-restaurante', async (req, res) => {
+app.post('/toggle-restaurante', requireSessionRestaurant, async (req, res) => {
 
   const result = await pool.query(`
     UPDATE restaurantes
     SET abierto = NOT abierto
-    WHERE id = 1
+    WHERE id = $1
     RETURNING abierto
-  `);
+  `, [req.restaurant.id]);
 
   res.json(result.rows[0]);
 
 });
 
-app.get('/force-order/:id', async (req, res) => {
+app.get('/force-order/:id', requireSessionRestaurant, requireWooOperationalConfig, async (req, res) => {
   const orderId = req.params.id;
+  const restauranteId = req.restaurant.id;
+  const config = req.operationalConfig;
 
   try {
 
     // 🔥 1. TRAER PEDIDO ACTUAL
     const existing = await pool.query(
-      `SELECT items FROM pedidos WHERE woo_order_id = $1`,
-      [orderId]
+      `SELECT items
+       FROM pedidos
+       WHERE woo_order_id = $1
+         AND restaurante_id = $2`,
+      [orderId, restauranteId]
     );
 
     if (existing.rows.length) {
@@ -1316,12 +1450,9 @@ app.get('/force-order/:id', async (req, res) => {
 
     // 🔥 2. TRAER DESDE WOO
     const wooRes = await axios.get(
-      `${WOO_URL}/wp-json/wc/v3/orders?search=${orderId}`,
+      `${config.woo_url}/wp-json/wc/v3/orders?search=${orderId}`,
       {
-        auth: {
-          username: CONSUMER_KEY,
-          password: CONSUMER_SECRET
-        }
+        auth: getWooAxiosAuth(config)
       }
     );
 
@@ -1332,18 +1463,7 @@ app.get('/force-order/:id', async (req, res) => {
     }
 
     // 🔥 3. PROCESAR ITEMS
-    const items = (order.line_items || []).map(i => {
-
-      const extras = (i.meta_data || [])
-        .filter(m => m.value && m.value !== '')
-        .map(m => `${m.key}: ${m.value}`)
-        .join(', ');
-
-      return {
-        nombre: `${i.name}${extras ? ` (${extras})` : ''}`,
-        cantidad: i.quantity
-      };
-    });
+    const items = buildWooOrderItems(order);
 
     // 🔥 4. GUARDAR SOLO UNA VEZ
     await pool.query(
@@ -1352,7 +1472,8 @@ app.get('/force-order/:id', async (req, res) => {
      customer_phone = $1,
      items = $2,
      refund_items = $3
-   WHERE woo_order_id = $4`,
+   WHERE woo_order_id = $4
+     AND restaurante_id = $5`,
   [
     // ✅ teléfono del cliente desde Woo
     order.billing?.phone || '',
@@ -1363,9 +1484,12 @@ app.get('/force-order/:id', async (req, res) => {
     // ✅ datos completos para refund parcial
     JSON.stringify(order.line_items || []),
 
-    order.id
+    order.id,
+    restauranteId
   ]
 );
+
+    invalidarCachePedidos(restauranteId);
 
 console.log("⚡ FORCE ORDER:", orderId);
 
@@ -1377,42 +1501,49 @@ console.log("⚡ FORCE ORDER:", orderId);
   }
 });
 
-app.post('/complete-order/:id', async (req, res) => {
+app.post('/complete-order/:id', requireSessionRestaurant, requireWooOperationalConfig, async (req, res) => {
   const id = req.params.id;
+  const restauranteId = req.restaurant.id;
+  const config = req.operationalConfig;
 
   try {
 
     // 🔥 1. TRAER EL woo_order_id REAL
     const result = await pool.query(
-      `SELECT woo_order_id FROM pedidos WHERE id = $1`,
-      [id]
+      `SELECT woo_order_id
+       FROM pedidos
+       WHERE id = $1
+         AND restaurante_id = $2`,
+      [id, restauranteId]
     );
 
     const wooId = result.rows[0]?.woo_order_id;
 
     // 🔥 2. ACTUALIZAR TU BD
     await pool.query(
-      `UPDATE pedidos SET estado = 'completed' WHERE id = $1`,
-      [id]
+      `UPDATE pedidos
+       SET estado = 'completed'
+       WHERE id = $1
+         AND restaurante_id = $2`,
+      [id, restauranteId]
     );
 
     // 🔥 3. ACTUALIZAR WOO (CLAVE)
     if (wooId) {
       await axios.put(
-        `${WOO_URL}/wp-json/wc/v3/orders/${wooId}`,
+        `${config.woo_url}/wp-json/wc/v3/orders/${wooId}`,
         {
           status: 'completed'
         },
         {
-          auth: {
-            username: CONSUMER_KEY,
-            password: CONSUMER_SECRET
-          }
+          auth: getWooAxiosAuth(config)
         }
       );
     }
 
     console.log("✅ COMPLETADO LOCAL + WOO:", id);
+
+    invalidarCachePedidos(restauranteId);
 
     res.json({ success: true });
 
@@ -1473,7 +1604,10 @@ app.get('/admin/restaurantes', async (req, res) => {
          updated_at,
          consumer_key,
          consumer_secret,
-         shipday_api
+         shipday_api,
+         webhook_token,
+         woo_webhook_secret,
+         shipday_webhook_secret
        FROM restaurantes
        ORDER BY id DESC`
     );
@@ -1488,7 +1622,10 @@ app.get('/admin/restaurantes', async (req, res) => {
       updated_at: restaurant.updated_at,
       consumer_key: maskSecret(restaurant.consumer_key),
       consumer_secret: maskSecret(restaurant.consumer_secret),
-      shipday_api: maskSecret(restaurant.shipday_api)
+      shipday_api: maskSecret(restaurant.shipday_api),
+      webhook_token: maskSecret(restaurant.webhook_token),
+      woo_webhook_secret: maskSecret(restaurant.woo_webhook_secret),
+      shipday_webhook_secret: maskSecret(restaurant.shipday_webhook_secret)
     })));
   } catch (error) {
     console.error('Error listando restaurantes:', error.message);
@@ -1499,6 +1636,133 @@ app.get('/admin/restaurantes', async (req, res) => {
   }
 
 });
+
+app.put('/admin/restaurantes/:id', async (req, res) => {
+  const restauranteId = Number(req.params.id);
+
+  if (!Number.isInteger(restauranteId) || restauranteId <= 0) {
+    return res.status(400).json({ success: false, message: 'Restaurante inválido' });
+  }
+
+  const updates = [];
+  const values = [];
+  const addValue = (column, value) => {
+    values.push(value);
+    updates.push(`${column} = $${values.length}`);
+  };
+
+  if (Object.prototype.hasOwnProperty.call(req.body, 'nombre')) {
+    const nombre = String(req.body.nombre || '').trim();
+    if (!nombre) {
+      return res.status(400).json({ success: false, message: 'El nombre es requerido' });
+    }
+    addValue('nombre', nombre);
+  }
+
+  for (const field of ['logo_url', 'woo_url']) {
+    if (Object.prototype.hasOwnProperty.call(req.body, field)) {
+      addValue(field, String(req.body[field] || '').trim() || null);
+    }
+  }
+
+  for (const field of [
+    'consumer_key',
+    'consumer_secret',
+    'shipday_api',
+    'webhook_token',
+    'woo_webhook_secret',
+    'shipday_webhook_secret'
+  ]) {
+    if (!Object.prototype.hasOwnProperty.call(req.body, field)) continue;
+    const secret = String(req.body[field] || '').trim();
+    if (!secret || secret.includes('*')) continue;
+    addValue(field, secret);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(req.body, 'activo')) {
+    addValue('activo', req.body.activo === true || req.body.activo === 'true');
+  }
+
+  if (!updates.length) {
+    return res.status(400).json({ success: false, message: 'No hay cambios válidos' });
+  }
+
+  values.push(restauranteId);
+
+  try {
+    const result = await pool.query(
+      `UPDATE restaurantes
+       SET ${updates.join(', ')},
+           updated_at = NOW()
+       WHERE id = $${values.length}
+       RETURNING id, nombre, logo_url, woo_url, activo`,
+      values
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, message: 'Restaurante no encontrado' });
+    }
+
+    return res.json({ success: true, restaurante: result.rows[0] });
+  } catch (error) {
+    console.error('Error actualizando restaurante:', error.message);
+    return res.status(500).json({ success: false, message: 'Error actualizando restaurante' });
+  }
+});
+
+app.post('/admin/restaurantes/:id/generar-secretos', async (req, res) => {
+  const restauranteId = Number(req.params.id);
+  const allowedFields = new Set([
+    'webhook_token',
+    'woo_webhook_secret',
+    'shipday_webhook_secret'
+  ]);
+  const requestedFields = Array.isArray(req.body?.fields)
+    ? Array.from(new Set(req.body.fields.filter(field => allowedFields.has(field))))
+    : Array.from(allowedFields);
+
+  if (!Number.isInteger(restauranteId) || restauranteId <= 0) {
+    return res.status(400).json({ success: false, message: 'Restaurante inválido' });
+  }
+
+  if (!requestedFields.length) {
+    return res.status(400).json({ success: false, message: 'No hay secretos válidos para generar' });
+  }
+
+  const values = requestedFields.map(() => crypto.randomBytes(32).toString('hex'));
+  const assignments = requestedFields.map((field, index) => `${field} = $${index + 1}`);
+  values.push(restauranteId);
+
+  try {
+    const result = await pool.query(
+      `UPDATE restaurantes
+       SET ${assignments.join(', ')},
+           updated_at = NOW()
+       WHERE id = $${values.length}
+       RETURNING id, webhook_token, woo_webhook_secret, shipday_webhook_secret`,
+      values
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, message: 'Restaurante no encontrado' });
+    }
+
+    const restaurant = result.rows[0];
+    return res.json({
+      success: true,
+      restaurante: {
+        id: restaurant.id,
+        webhook_token: maskSecret(restaurant.webhook_token),
+        woo_webhook_secret: maskSecret(restaurant.woo_webhook_secret),
+        shipday_webhook_secret: maskSecret(restaurant.shipday_webhook_secret)
+      }
+    });
+  } catch (error) {
+    console.error('Error generando secretos:', error.message);
+    return res.status(500).json({ success: false, message: 'Error generando secretos' });
+  }
+});
+
 app.post('/admin/usuarios', async (req, res) => {
 
   const { email, password, restaurante_id } = req.body;
@@ -1582,9 +1846,11 @@ app.get('/admin/usuarios', async (req, res) => {
 
 });
 
-app.post('/refund', async (req, res) => {
+app.post('/refund', requireSessionRestaurant, requireWooOperationalConfig, async (req, res) => {
 
   const { woo_order_id, orderId, amount } = req.body;
+  const restauranteId = req.restaurant.id;
+  const config = req.operationalConfig;
 
   // ✅ Acepta ambos nombres por seguridad
   const finalOrderId = woo_order_id || orderId;
@@ -1607,8 +1873,9 @@ app.post('/refund', async (req, res) => {
     const pedido = await pool.query(
       `SELECT woo_order_id, refunded, refund_amount, total
        FROM pedidos
-       WHERE woo_order_id = $1`,
-      [String(finalOrderId)]
+       WHERE woo_order_id = $1
+         AND restaurante_id = $2`,
+      [String(finalOrderId), restauranteId]
     );
 
     if (!pedido.rows.length) {
@@ -1626,16 +1893,13 @@ app.post('/refund', async (req, res) => {
     }
 
     // ✅ 2. Verificar orden en Woo
-    const orderUrl = `${WOO_URL}/wp-json/wc/v3/orders/${finalOrderId}`;
+    const orderUrl = `${config.woo_url}/wp-json/wc/v3/orders/${finalOrderId}`;
     console.log("🔎 ORDER URL:", orderUrl);
 
     const wooRes = await axios.get(
       orderUrl,
       {
-        auth: {
-          username: CONSUMER_KEY,
-          password: CONSUMER_SECRET
-        }
+        auth: getWooAxiosAuth(config)
       }
     );
 
@@ -1649,7 +1913,7 @@ app.post('/refund', async (req, res) => {
     }
 
     // ✅ 3. Crear refund en Woo
-    const refundUrl = `${WOO_URL}/wp-json/wc/v3/orders/${finalOrderId}/refunds`;
+    const refundUrl = `${config.woo_url}/wp-json/wc/v3/orders/${finalOrderId}/refunds`;
     console.log("🔗 REFUND URL:", refundUrl);
 
     const refundRes = await axios.post(
@@ -1660,10 +1924,7 @@ app.post('/refund', async (req, res) => {
         api_refund: true
       },
       {
-        auth: {
-          username: CONSUMER_KEY,
-          password: CONSUMER_SECRET
-        }
+        auth: getWooAxiosAuth(config)
       }
     );
 
@@ -1674,12 +1935,16 @@ app.post('/refund', async (req, res) => {
       `UPDATE pedidos
        SET refunded = true,
            refund_amount = $1
-       WHERE woo_order_id = $2`,
+       WHERE woo_order_id = $2
+         AND restaurante_id = $3`,
       [
         Number(amount).toFixed(2),
-        String(finalOrderId)
+        String(finalOrderId),
+        restauranteId
       ]
     );
+
+    invalidarCachePedidos(restauranteId);
 
     res.json({
       success: true,
@@ -1704,66 +1969,16 @@ app.post('/refund', async (req, res) => {
 
 });
 
-app.post('/refund', async (req, res) => {
-  const { woo_order_id, amount } = req.body;
-
-  try {
-    // 🔥 1. VALIDAR SI YA FUE REEMBOLSADO
-    const pedido = await pool.query(
-      'SELECT refunded FROM pedidos WHERE woo_order_id = $1',
-      [woo_order_id]
-    );
-
-    if (!pedido.rows.length) {
-      return res.json({ success: false, message: "Pedido no encontrado" });
-    }
-
-    if (pedido.rows[0].refunded) {
-      return res.json({ success: false, message: "Ya fue reembolsado" });
-    }
-
-    // 🔥 2. HACER REFUND EN WOO
-    await axios.post(
-      `${WOO_URL}/wp-json/wc/v3/orders/${woo_order_id}/refunds`,
-      {
-        amount: amount.toString()
-      },
-      {
-        auth: {
-          username: CONSUMER_KEY,
-          password: CONSUMER_SECRET
-        }
-      }
-    );
-
-    // 🔥 3. GUARDAR EN DB
-    await pool.query(
-      `UPDATE pedidos
-       SET refunded = true,
-           refund_amount = $1
-       WHERE woo_order_id = $2`,
-      [amount, woo_order_id]
-    );
-
-    console.log("💸 REFUND OK:", woo_order_id);
-
-    res.json({ success: true });
-
-  } catch (error) {
-    console.error("❌ ERROR REFUND:", error.response?.data || error.message);
-    res.json({ success: false, message: "Error refund" });
-  }
-});
-
-app.get('/refund-data/:woo_order_id', async (req, res) => {
+app.get('/refund-data/:woo_order_id', requireSessionRestaurant, async (req, res) => {
   const wooOrderId = req.params.woo_order_id;
 
   try {
     const result = await pool.query(
       `SELECT woo_order_id, total, refund_items
        FROM pedidos
-       WHERE woo_order_id = $1`,
-      [wooOrderId]
+       WHERE woo_order_id = $1
+         AND restaurante_id = $2`,
+      [wooOrderId, req.restaurant.id]
     );
 
     if (!result.rows.length) {
@@ -1842,9 +2057,9 @@ app.get('/refund-data/:woo_order_id', async (req, res) => {
 });
 
 
-app.post('/acciones-woo', async (req, res) => {
+app.post('/acciones-woo', requireSessionRestaurant, async (req, res) => {
   try {
-    const restaurante_id = req.session?.restaurante_id || 1;
+    const restaurante_id = req.restaurant.id;
     const { tipo, woo_product_id, payload } = req.body;
 
     if (!tipo) {
@@ -1884,96 +2099,34 @@ app.post('/acciones-woo', async (req, res) => {
   }
 });
 
-app.get('/acciones-woo-pendientes', async (req, res) => {
+async function sendPendingWooActions(res, restauranteId) {
   try {
-    const secret = req.query.secret;
-
-    if (!WEBHOOK_SECRET || secret !== WEBHOOK_SECRET) {
-      return res.status(401).json({
-        success: false,
-        message: "No autorizado"
-      });
-    }
-
-    const restaurante_id = 1;
-
     const result = await pool.query(
       `SELECT *
        FROM acciones_woo
        WHERE restaurante_id = $1
-       AND estado = 'pending'
+         AND estado = 'pending'
        ORDER BY created_at ASC
        LIMIT 10`,
-      [restaurante_id]
+      [restauranteId]
     );
 
-    res.json({
+    return res.json({
       success: true,
       acciones: result.rows
     });
-
   } catch (error) {
     console.error("❌ ERROR ACCIONES PENDIENTES:", error.message);
-
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Error obteniendo acciones pendientes"
     });
   }
-});
+}
 
-app.get('/acciones-woo-pendientes', async (req, res) => {
+async function saveWooActionResult(req, res, restauranteId, actionId) {
   try {
-    const secret = req.query.secret;
-
-    if (!WEBHOOK_SECRET || secret !== WEBHOOK_SECRET) {
-      return res.status(401).json({
-        success: false,
-        message: "No autorizado"
-      });
-    }
-
-    const restaurante_id = 1;
-
-    const result = await pool.query(
-      `SELECT *
-       FROM acciones_woo
-       WHERE restaurante_id = $1
-       AND estado = 'pending'
-       ORDER BY created_at ASC
-       LIMIT 10`,
-      [restaurante_id]
-    );
-
-    res.json({
-      success: true,
-      acciones: result.rows
-    });
-
-  } catch (error) {
-    console.error("❌ ERROR ACCIONES PENDIENTES:", error.message);
-
-    res.status(500).json({
-      success: false,
-      message: "Error obteniendo acciones pendientes"
-    });
-  }
-});
-
-app.post('/acciones-woo/:id/resultado', async (req, res) => {
-  try {
-    const secret = req.query.secret;
-
-    if (!WEBHOOK_SECRET || secret !== WEBHOOK_SECRET) {
-      return res.status(401).json({
-        success: false,
-        message: "No autorizado"
-      });
-    }
-
-    const accionId = req.params.id;
     const { success, resultado, error } = req.body;
-
     const nuevoEstado = success ? 'completed' : 'failed';
 
     const result = await pool.query(
@@ -1984,27 +2137,83 @@ app.post('/acciones-woo/:id/resultado', async (req, res) => {
            updated_at = NOW(),
            completed_at = NOW()
        WHERE id = $4
+         AND restaurante_id = $5
        RETURNING *`,
       [
         nuevoEstado,
         JSON.stringify(resultado || {}),
         error || null,
-        accionId
+        actionId,
+        restauranteId
       ]
     );
 
-    res.json({
-      success: true,
-      accion: result.rows[0]
-    });
+    if (!result.rows.length) {
+      return res.status(404).json({
+        success: false,
+        message: 'Acción no encontrada'
+      });
+    }
 
+    return res.json({ success: true, accion: result.rows[0] });
   } catch (error) {
     console.error("❌ ERROR RESULTADO ACCIÓN:", error.message);
-
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Error guardando resultado"
     });
+  }
+}
+
+app.get('/bridge/:webhookToken/actions', async (req, res) => {
+  try {
+    const config = await resolveOperationalRestaurantByToken(req.params.webhookToken);
+    return sendPendingWooActions(res, config.id);
+  } catch (error) {
+    return sendOperationalError(res, error);
+  }
+});
+
+app.post('/bridge/:webhookToken/actions/:actionId/result', async (req, res) => {
+  try {
+    const config = await resolveOperationalRestaurantByToken(req.params.webhookToken);
+    return saveWooActionResult(req, res, config.id, req.params.actionId);
+  } catch (error) {
+    return sendOperationalError(res, error);
+  }
+});
+
+app.get('/acciones-woo-pendientes', async (req, res) => {
+  try {
+    const config = await getLegacyRestaurantOneOperationalConfig();
+    const validSecret =
+      safeEqualText(req.query.secret, config.webhook_token) ||
+      safeEqualText(req.query.secret, config.woo_webhook_secret);
+
+    if (!validSecret) {
+      return res.status(401).json({ success: false, message: 'No autorizado' });
+    }
+
+    return sendPendingWooActions(res, 1);
+  } catch (error) {
+    return sendOperationalError(res, error);
+  }
+});
+
+app.post('/acciones-woo/:id/resultado', async (req, res) => {
+  try {
+    const config = await getLegacyRestaurantOneOperationalConfig();
+    const validSecret =
+      safeEqualText(req.query.secret, config.webhook_token) ||
+      safeEqualText(req.query.secret, config.woo_webhook_secret);
+
+    if (!validSecret) {
+      return res.status(401).json({ success: false, message: 'No autorizado' });
+    }
+
+    return saveWooActionResult(req, res, 1, req.params.id);
+  } catch (error) {
+    return sendOperationalError(res, error);
   }
 });
 
@@ -2026,9 +2235,9 @@ app.get('/push-public-key', (req, res) => {
 // ======================================================
 // 🔔 GUARDAR SUSCRIPCIÓN PUSH DEL DISPOSITIVO
 // ======================================================
-app.post('/push-subscribe', async (req, res) => {
+app.post('/push-subscribe', requireSessionRestaurant, async (req, res) => {
   try {
-    const restaurante_id = req.session?.restaurante_id || 1;
+    const restaurante_id = req.restaurant.id;
     const subscription = req.body;
 
     if (
@@ -2097,8 +2306,9 @@ app.post('/push-subscribe', async (req, res) => {
 // ======================================================
 // 🔕 DESACTIVAR SUSCRIPCIÓN PUSH DEL DISPOSITIVO
 // ======================================================
-app.post('/push-unsubscribe', async (req, res) => {
+app.post('/push-unsubscribe', requireSessionRestaurant, async (req, res) => {
   try {
+    const restaurante_id = req.restaurant.id;
     const { endpoint } = req.body;
 
     if (!endpoint) {
@@ -2112,8 +2322,9 @@ app.post('/push-unsubscribe', async (req, res) => {
       `UPDATE push_subscriptions
        SET activo = false,
            updated_at = NOW()
-       WHERE endpoint = $1`,
-      [endpoint]
+       WHERE endpoint = $1
+         AND restaurante_id = $2`,
+      [endpoint, restaurante_id]
     );
 
     res.json({
@@ -2134,9 +2345,9 @@ app.post('/push-unsubscribe', async (req, res) => {
 // ======================================================
 // 🧪 ENVIAR NOTIFICACIÓN PUSH DE PRUEBA
 // ======================================================
-app.post('/push-test', async (req, res) => {
+app.post('/push-test', requireSessionRestaurant, async (req, res) => {
   try {
-    const restaurante_id = req.session?.restaurante_id || 1;
+    const restaurante_id = req.restaurant.id;
 
     const result = await pool.query(
       `SELECT id, endpoint, p256dh, auth
@@ -2157,7 +2368,7 @@ app.post('/push-test', async (req, res) => {
       title: '🔔 Notificación Denix activada',
       body: 'Tu dispositivo ya puede recibir alertas de nuevos pedidos.',
       url: '/',
-      tag: 'denix-prueba-notificaciones'
+      tag: `denix-prueba-notificaciones-${restaurante_id}`
     });
 
     let enviados = 0;
@@ -2185,8 +2396,9 @@ app.post('/push-test', async (req, res) => {
             `UPDATE push_subscriptions
              SET activo = false,
                  updated_at = NOW()
-             WHERE id = $1`,
-            [dispositivo.id]
+             WHERE id = $1
+               AND restaurante_id = $2`,
+            [dispositivo.id, restaurante_id]
           );
 
           desactivados++;

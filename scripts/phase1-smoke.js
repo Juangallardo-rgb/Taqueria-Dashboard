@@ -150,6 +150,9 @@ async function run() {
       assertMasked(item.consumer_key, 'consumer_key');
       assertMasked(item.consumer_secret, 'consumer_secret');
       assertMasked(item.shipday_api, 'shipday_api');
+      assertMasked(item.webhook_token, 'webhook_token');
+      assertMasked(item.woo_webhook_secret, 'woo_webhook_secret');
+      assertMasked(item.shipday_webhook_secret, 'shipday_webhook_secret');
       assert.deepEqual(
         Object.keys(item).sort(),
         [
@@ -161,7 +164,10 @@ async function run() {
           'logo_url',
           'nombre',
           'shipday_api',
+          'shipday_webhook_secret',
           'updated_at',
+          'webhook_token',
+          'woo_webhook_secret',
           'woo_url'
         ].sort()
       );

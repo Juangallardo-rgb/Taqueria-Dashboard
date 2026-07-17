@@ -137,6 +137,7 @@ function mostrarLoginSinSesion() {
 
 async function cargarMiRestaurante() {
   const logo = document.getElementById('businessLogo');
+  const name = document.getElementById('businessName');
 
   try {
     const res = await fetch('/mi-restaurante', { cache: 'no-store' });
@@ -149,6 +150,11 @@ async function cargarMiRestaurante() {
       logo.src = restaurant.logo_url || '/labonita.png';
       logo.alt = restaurant.nombre || 'Restaurante';
     }
+
+    if (name) name.textContent = restaurant.nombre || 'Restaurante';
+    document.title = restaurant.nombre
+      ? `${restaurant.nombre} - DENIX`
+      : 'DENIX';
   } catch (error) {
     console.error('ERROR CARGANDO MI RESTAURANTE:', error);
   }

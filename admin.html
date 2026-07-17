@@ -92,6 +92,8 @@
 // RESTAURANTES
 /////////////////////////////
 
+let restaurantesActuales = [];
+
 async function crearRestaurante() {
 
   const data = {
@@ -130,6 +132,7 @@ async function cargarRestaurantes() {
 
   const res = await fetch('/admin/restaurantes');
   const data = await res.json();
+  restaurantesActuales = data;
 
   const cont = document.getElementById('lista');
   cont.innerHTML = '';
@@ -139,10 +142,72 @@ async function cargarRestaurantes() {
       <div class="card">
         <b>${r.nombre}</b><br>
         ID: ${r.id}<br>
-        Woo: ${r.woo_url}
+        Woo: ${r.woo_url || 'Sin configurar'}<br>
+        Estado: ${r.activo ? 'Activo' : 'Inactivo'}<br>
+        Consumer Key: ${r.consumer_key || 'Sin configurar'}<br>
+        Consumer Secret: ${r.consumer_secret || 'Sin configurar'}<br>
+        Shipday API: ${r.shipday_api || 'Sin configurar'}<br>
+        Webhook token: ${r.webhook_token || 'Sin configurar'}<br>
+        Woo webhook secret: ${r.woo_webhook_secret || 'Sin configurar'}<br>
+        Shipday webhook secret: ${r.shipday_webhook_secret || 'Sin configurar'}<br>
+        <button onclick="editarRestaurante(${r.id})">Editar</button>
+        <button onclick="generarSecretos(${r.id})">Generar secretos</button>
       </div>
     `;
   });
+}
+
+async function editarRestaurante(id) {
+  const actual = restaurantesActuales.find(r => Number(r.id) === Number(id));
+  if (!actual) return;
+
+  const data = {
+    nombre: prompt('Nombre', actual.nombre || ''),
+    logo_url: prompt('URL del logo', actual.logo_url || ''),
+    woo_url: prompt('Woo URL', actual.woo_url || ''),
+    consumer_key: prompt('Consumer Key (vacío o enmascarado conserva el actual)', actual.consumer_key || ''),
+    consumer_secret: prompt('Consumer Secret (vacío o enmascarado conserva el actual)', actual.consumer_secret || ''),
+    shipday_api: prompt('Shipday API (vacío o enmascarado conserva el actual)', actual.shipday_api || ''),
+    webhook_token: prompt('Webhook token (vacío o enmascarado conserva el actual)', actual.webhook_token || ''),
+    woo_webhook_secret: prompt('Woo webhook secret (vacío o enmascarado conserva el actual)', actual.woo_webhook_secret || ''),
+    shipday_webhook_secret: prompt('Shipday webhook secret (vacío o enmascarado conserva el actual)', actual.shipday_webhook_secret || ''),
+    activo: confirm('Aceptar = restaurante activo. Cancelar = inactivo.')
+  };
+
+  if (data.nombre === null) return;
+
+  const res = await fetch(`/admin/restaurantes/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  const result = await res.json();
+
+  if (!res.ok) {
+    alert(result.message || 'No se pudo actualizar el restaurante');
+    return;
+  }
+
+  await cargarRestaurantes();
+}
+
+async function generarSecretos(id) {
+  if (!confirm('Se reemplazarán los tres secretos de webhook. ¿Continuar?')) return;
+
+  const res = await fetch(`/admin/restaurantes/${id}/generar-secretos`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+  });
+  const result = await res.json();
+
+  if (!res.ok) {
+    alert(result.message || 'No se pudieron generar los secretos');
+    return;
+  }
+
+  alert('Secretos generados. Por seguridad solo se mostrarán enmascarados.');
+  await cargarRestaurantes();
 }
 
 
