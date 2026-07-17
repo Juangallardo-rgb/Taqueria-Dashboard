@@ -29,6 +29,9 @@ const {
 const { createRestaurantContext } = require('./lib/restaurant-context');
 const { maskSecret } = require('./lib/mask-secret');
 const { registerPublicAssetRoutes } = require('./lib/public-assets');
+const {
+  createPublicRestaurantStatusHandler
+} = require('./lib/public-restaurant-status');
 const { createOperationalConfig } = require('./lib/operational-config');
 const {
   verifyWooWebhookSignature,
@@ -146,6 +149,13 @@ app.use('/admin', requireAdmin);
 
 // Solo estos recursos frontend son públicos.
 registerPublicAssetRoutes(app, __dirname);
+
+const publicRestaurantStatusHandler = createPublicRestaurantStatusHandler({ pool });
+
+app.get(
+  '/public/restaurants/:webhookToken/status',
+  publicRestaurantStatusHandler
+);
 
 app.get('/session', requireSessionRestaurant, (req, res) => {
   res.json({
