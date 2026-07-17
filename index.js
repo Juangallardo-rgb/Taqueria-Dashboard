@@ -35,6 +35,8 @@ const {
 const { createOperationalConfig } = require('./lib/operational-config');
 const {
   verifyWooWebhookSignature,
+  isWooWebhookPing,
+  sendWooWebhookPingAccepted,
   safeEqualText,
   verifyShipdaySecret
 } = require('./lib/webhook-security');
@@ -321,6 +323,10 @@ app.post('/webhooks/woo/:webhookToken/product', async (req, res) => {
       { required: ['woo_webhook_secret'] }
     );
 
+    if (isWooWebhookPing(req)) {
+      return sendWooWebhookPingAccepted(res);
+    }
+
     const validSignature = verifyWooWebhookSignature(
       req.rawBody,
       config.woo_webhook_secret,
@@ -342,6 +348,10 @@ app.post('/webhook-product', async (req, res) => {
     const config = await getLegacyRestaurantOneOperationalConfig({
       required: ['woo_webhook_secret']
     });
+
+    if (isWooWebhookPing(req)) {
+      return sendWooWebhookPingAccepted(res);
+    }
 
     const validSignature = verifyWooWebhookSignature(
       req.rawBody,
@@ -774,6 +784,10 @@ app.post('/webhooks/woo/:webhookToken/order', async (req, res) => {
       { required: ['woo_webhook_secret'] }
     );
 
+    if (isWooWebhookPing(req)) {
+      return sendWooWebhookPingAccepted(res);
+    }
+
     if (!verifyWooWebhookSignature(
       req.rawBody,
       config.woo_webhook_secret,
@@ -793,6 +807,10 @@ app.post('/webhook-order', async (req, res) => {
     const config = await getLegacyRestaurantOneOperationalConfig({
       required: ['woo_webhook_secret']
     });
+
+    if (isWooWebhookPing(req)) {
+      return sendWooWebhookPingAccepted(res);
+    }
 
     if (!verifyWooWebhookSignature(
       req.rawBody,
