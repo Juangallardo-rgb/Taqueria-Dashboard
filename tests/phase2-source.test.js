@@ -5,6 +5,10 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 const indexSource = fs.readFileSync(path.join(root, 'index.js'), 'utf8');
+const productCrudSource = fs.readFileSync(
+  path.join(root, 'lib', 'product-crud.js'),
+  'utf8'
+);
 const stripeSource = fs.readFileSync(path.join(root, 'routes', 'stripeConnect.js'), 'utf8');
 const adminSource = fs.readFileSync(path.join(root, 'admin.html'), 'utf8');
 const preflight = fs.readFileSync(
@@ -40,7 +44,7 @@ test('webhooks nuevos resuelven token, validan raw body y conservan legacy', () 
 test('órdenes, deliveries y productos usan claves compuestas', () => {
   assert.ok(count(indexSource, /ON CONFLICT \(restaurante_id, woo_order_id\)/g) >= 2);
   assert.match(indexSource, /ON CONFLICT \(restaurante_id, order_number\)/);
-  assert.match(indexSource, /ON CONFLICT \(restaurante_id, woo_product_id\)/);
+  assert.match(productCrudSource, /ON CONFLICT \(restaurante_id, woo_product_id\)/);
   assert.doesNotMatch(indexSource, /ON CONFLICT \(woo_order_id\)/);
   assert.doesNotMatch(indexSource, /ON CONFLICT \(order_number\)/);
 });

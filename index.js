@@ -46,6 +46,11 @@ const {
   getWooDeliveryAddress,
   shouldIgnoreWooOrder
 } = require('./lib/order-utils');
+const { createRestaurantProductCache } = require('./lib/product-cache');
+const {
+  ProductMutationError,
+  createProductCrudService
+} = require('./lib/product-crud');
 
 
 const app = express();
@@ -115,6 +120,9 @@ const {
   pool,
   getRestaurantIntegrationConfig
 });
+
+const productCache = createRestaurantProductCache();
+const productCrud = createProductCrudService({ pool, cache: productCache });
 
 function sendOperationalError(res, error) {
   return res.status(error.statusCode || 500).json({
@@ -238,71 +246,19 @@ async function processWooProductWebhook(req, res, restauranteId) {
     }
 
     const wooProductId = String(product.id);
-
-    const imagen = product.images && product.images.length
-      ? product.images[0].src
-      : null;
-
-    const categorias = product.categories || [];
-
-    const isDeleted =
-      topic.includes('deleted') ||
-      product.status === 'trash';
-
-    await pool.query(
-      `INSERT INTO productos
-        (
-          restaurante_id,
-          woo_product_id,
-          nombre,
-          precio,
-          regular_price,
-          sale_price,
-          estado,
-          stock_status,
-          imagen,
-          categorias,
-          raw,
-          deleted,
-          updated_at
-        )
-       VALUES
-        ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
-       ON CONFLICT (restaurante_id, woo_product_id)
-       DO UPDATE SET
-          nombre = EXCLUDED.nombre,
-          precio = EXCLUDED.precio,
-          regular_price = EXCLUDED.regular_price,
-          sale_price = EXCLUDED.sale_price,
-          estado = EXCLUDED.estado,
-          stock_status = EXCLUDED.stock_status,
-          imagen = EXCLUDED.imagen,
-          categorias = EXCLUDED.categorias,
-          raw = EXCLUDED.raw,
-          deleted = EXCLUDED.deleted,
-          updated_at = NOW()`,
-      [
-        restauranteId,
-        wooProductId,
-        product.name || '',
-        Number(product.price || 0),
-        Number(product.regular_price || 0),
-        Number(product.sale_price || 0),
-        product.status || '',
-        product.stock_status || '',
-        imagen,
-        JSON.stringify(categorias),
-        JSON.stringify(product),
-        isDeleted
-      ]
-    );
+    const updatedProduct = await productCrud.reconcileWooProduct({
+      restauranteId,
+      product,
+      topic
+    });
 
     console.log("✅ PRODUCTO GUARDADO EN SUPABASE:", wooProductId);
 
     res.json({
       success: true,
       message: "Producto guardado",
-      product_id: wooProductId
+      product_id: wooProductId,
+      producto: updatedProduct
     });
 
   } catch (error) {
@@ -375,29 +331,11 @@ app.post('/webhook-product', async (req, res) => {
 app.get('/productos-db', requireSessionRestaurant, async (req, res) => {
   try {
     const restaurante_id = req.restaurant.id;
+    const fresh = req.query.refresh === '1';
+    const products = await productCrud.listProducts(restaurante_id, { fresh });
 
-    const result = await pool.query(
-      `SELECT 
-        id,
-        woo_product_id,
-        nombre,
-        precio,
-        regular_price,
-        sale_price,
-        estado,
-        stock_status,
-        imagen,
-        categorias,
-        raw,
-        updated_at
-       FROM productos
-       WHERE restaurante_id = $1
-       AND deleted = false
-       ORDER BY nombre ASC`,
-      [restaurante_id]
-    );
-
-    res.json(result.rows);
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.json(products);
 
   } catch (error) {
     console.error("❌ ERROR PRODUCTOS DB:", error.message);
@@ -2089,40 +2027,27 @@ app.post('/acciones-woo', requireSessionRestaurant, async (req, res) => {
   try {
     const restaurante_id = req.restaurant.id;
     const { tipo, woo_product_id, payload } = req.body;
-
-    if (!tipo) {
-      return res.status(400).json({
-        success: false,
-        message: "Falta tipo de acción"
-      });
-    }
-
-    const result = await pool.query(
-      `INSERT INTO acciones_woo
-        (restaurante_id, tipo, woo_product_id, payload, estado, created_at, updated_at)
-       VALUES
-        ($1, $2, $3, $4, 'pending', NOW(), NOW())
-       RETURNING *`,
-      [
-        restaurante_id,
-        tipo,
-        woo_product_id ? String(woo_product_id) : null,
-        JSON.stringify(payload || {})
-      ]
-    );
+    const result = await productCrud.mutateProduct({
+      restauranteId: restaurante_id,
+      tipo,
+      wooProductId: woo_product_id,
+      payload
+    });
 
     res.json({
-      success: true,
-      accion: result.rows[0]
+      success: result.success,
+      message: result.message,
+      producto: result.producto
     });
 
   } catch (error) {
     console.error("❌ ERROR CREANDO ACCIÓN WOO:", error.message);
 
-    res.status(500).json({
+    res.status(error instanceof ProductMutationError ? error.statusCode : 500).json({
       success: false,
-      message: "Error creando acción",
-      error: error.message
+      message: error instanceof ProductMutationError
+        ? error.message
+        : "Error guardando producto"
     });
   }
 });

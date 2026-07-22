@@ -2,6 +2,8 @@ let audioPermitido = false;
 let pedidosVistos = JSON.parse(localStorage.getItem("pedidosVistos")) || [];
 let productosGlobal = [];
 let productoEditando = null;
+let guardandoProducto = false;
+const eliminacionesProductosEnCurso = new Set();
 let tabActual = 'recientes';
 let ultimoPedidoId = null;
 let ultimoPedidoGlobal = null;
@@ -565,28 +567,34 @@ function reproducirSonido() {
 // =====================
 // PRODUCTOS
 // =====================
-async function verProductos() {
+async function verProductos({ background = false } = {}) {
 
-  document.getElementById('tituloPagina').innerText = "Productos";
-  window.viendoPedidos = false;
+  if (!background) {
+    document.getElementById('tituloPagina').innerText = "Productos";
+    window.viendoPedidos = false;
+  }
 
   const contenido = document.getElementById('contenido');
   const contenedor = document.getElementById('contenedor');
 
-  // FORMULARIO
-  contenido.innerHTML = `
-    <div class="card">
-      <h2>Productos</h2>
-      <input id="buscadorProductos" placeholder="🔍 Buscar producto..." oninput="filtrarProductos()" />
-      <button onclick="abrirCrear()">➕ Crear Producto</button>
-    </div>
-  `;
+  if (!background) {
+    // FORMULARIO
+    contenido.innerHTML = `
+      <div class="card">
+        <h2>Productos</h2>
+        <input id="buscadorProductos" placeholder="🔍 Buscar producto..." oninput="filtrarProductos()" />
+        <button onclick="abrirCrear()">➕ Crear Producto</button>
+      </div>
+    `;
 
-  contenedor.innerHTML = '<p>Cargando productos...</p>';
+    contenedor.innerHTML = '<p>Cargando productos...</p>';
+  }
 
   try {
     // 🔥 NUEVO: leer productos desde Supabase, no desde WooCommerce
-    const res = await fetch('/productos-db?ts=' + Date.now());
+    const res = await fetch('/productos-db?refresh=1&ts=' + Date.now(), {
+      cache: 'no-store'
+    });
 
     if (!res.ok) throw new Error("Error productos-db");
 
@@ -629,6 +637,8 @@ async function verProductos() {
       };
     });
 
+    if (background && window.viendoPedidos) return;
+
     productosGlobal = productos;
 
     if (!productos.length) {
@@ -653,8 +663,49 @@ async function verProductos() {
 
   } catch (error) {
     console.error("❌ ERROR PRODUCTOS:", error);
-    contenedor.innerHTML = "<p>Error cargando productos</p>";
+    if (!background) {
+      contenedor.innerHTML = "<p>Error cargando productos</p>";
+    }
   }
+}
+
+function renderizarProductosActuales() {
+  const buscador = document.getElementById('buscadorProductos');
+  if (buscador && buscador.value.trim()) {
+    filtrarProductos();
+    return;
+  }
+
+  renderProductos(productosGlobal);
+}
+
+function actualizarProductoEnLista(producto) {
+  if (!producto) return;
+
+  const productId = String(producto.woo_product_id ?? producto.id);
+  const index = productosGlobal.findIndex(item => (
+    String(item.woo_product_id ?? item.id) === productId
+  ));
+
+  if (index >= 0) {
+    productosGlobal[index] = { ...productosGlobal[index], ...producto };
+  } else {
+    productosGlobal.push(producto);
+  }
+
+  renderizarProductosActuales();
+}
+
+function eliminarProductoDeLista(wooProductId) {
+  const productId = String(wooProductId);
+  productosGlobal = productosGlobal.filter(item => (
+    String(item.woo_product_id ?? item.id) !== productId
+  ));
+  renderizarProductosActuales();
+}
+
+function confirmarProductosEnSegundoPlano() {
+  void verProductos({ background: true });
 }
 // =====================
 // RESTAURANTE
@@ -814,6 +865,9 @@ function editarProducto(id) {
 async function eliminarProducto(id) {
 
   if (!confirm("¿Eliminar este producto?")) return;
+  const productId = String(id);
+  if (eliminacionesProductosEnCurso.has(productId)) return;
+  eliminacionesProductosEnCurso.add(productId);
 
   try {
 
@@ -833,17 +887,17 @@ async function eliminarProducto(id) {
       throw new Error(data.message || "Error creando acción de eliminación");
     }
 
-    alert("✅ Eliminación enviada. Ejecuta el puente en WordPress para aplicarla.");
+    eliminarProductoDeLista(id);
+    alert(data.message || "Producto eliminado");
 
-    console.log("✅ Acción eliminar producto creada:", data);
-
-    // No lo quitamos todavía de la lista porque Woo debe eliminarlo primero.
-    // Luego el webhook Product deleted actualizará Supabase.
-    verProductos();
+    console.log("✅ Producto eliminado:", data);
+    confirmarProductosEnSegundoPlano();
 
   } catch (error) {
     console.error("❌ ERROR ELIMINAR PRODUCTO:", error);
     alert("Error eliminando producto");
+  } finally {
+    eliminacionesProductosEnCurso.delete(productId);
   }
 }
 
@@ -883,6 +937,9 @@ async function guardarProducto() {
     payload.categories = [{ id: parseInt(categoria) }];
   }
 
+  if (guardandoProducto) return;
+  guardandoProducto = true;
+
   try {
 
     let tipo = 'create_product';
@@ -917,15 +974,17 @@ async function guardarProducto() {
       popup.classList.remove('active');
     }
 
-    alert("✅ Acción enviada. Ejecuta el puente en WordPress para aplicar el cambio.");
+    if (data.producto) actualizarProductoEnLista(data.producto);
+    alert(data.message || (tipo === 'update_product' ? "Producto actualizado" : "Producto creado"));
+    confirmarProductosEnSegundoPlano();
 
-    verProductos();
-
-    console.log("✅ Acción producto creada:", data);
+    console.log("✅ Producto guardado:", data);
 
   } catch (error) {
     console.error("❌ ERROR GUARDAR PRODUCTO:", error);
     alert("Error guardando producto");
+  } finally {
+    guardandoProducto = false;
   }
 }
 
@@ -981,6 +1040,9 @@ async function guardarEdicion() {
     return;
   }
 
+  if (guardandoProducto) return;
+  guardandoProducto = true;
+
   try {
 
     let tipo = 'create_product';
@@ -1024,13 +1086,15 @@ async function guardarEdicion() {
     cerrarEditar();
     productoEditando = null;
 
-    alert("✅ Cambio enviado. Ejecuta el puente en WordPress para aplicarlo.");
-
-    verProductos();
+    if (data.producto) actualizarProductoEnLista(data.producto);
+    alert(data.message || (tipo === 'update_product' ? "Producto actualizado" : "Producto creado"));
+    confirmarProductosEnSegundoPlano();
 
   } catch (error) {
     console.error("❌ ERROR GUARDAR EDICIÓN:", error);
     alert("Error guardando producto");
+  } finally {
+    guardandoProducto = false;
   }
 }
 
