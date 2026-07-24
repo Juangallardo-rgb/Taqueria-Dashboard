@@ -41,6 +41,7 @@ const {
   verifyShipdaySecret
 } = require('./lib/webhook-security');
 const {
+  resolverTipoPedidoWoo,
   detectarTipoPedidoWoo,
   buildWooOrderItems,
   getWooDeliveryAddress,
@@ -575,7 +576,7 @@ async function processWooOrderWebhook(req, res, restauranteId) {
   try {
 
     const items = buildWooOrderItems(order);
-    const tipoPedido = detectarTipoPedidoWoo(order);
+    const { tipoPedido } = resolverTipoPedidoWoo(order);
     const {
       deliveryAddress,
       deliveryCity,
@@ -843,12 +844,12 @@ async function processShipdayWebhook(req, res, restauranteId, config) {
             deliveryCity,
             deliveryPostcode
           } = getWooDeliveryAddress(order);
-          const tipoPedidoWoo = detectarTipoPedidoWoo(order);
-          const tipoPedido = tipoPedidoWoo === 'delivery'
-            ? tipoPedidoWoo
-            : 'delivery';
+          const {
+            tipoPedido,
+            tipoPedidoExplicito
+          } = resolverTipoPedidoWoo(order);
 
-          // 🔥 3. INSERTAR / ACTUALIZAR PEDIDO COMO DELIVERY
+          // 🔥 3. INSERTAR / ACTUALIZAR PEDIDO DESDE WOO
           await pool.query(
             `INSERT INTO pedidos 
             (
@@ -875,7 +876,11 @@ async function processShipdayWebhook(req, res, restauranteId, config) {
               customer_phone = EXCLUDED.customer_phone,
               items = EXCLUDED.items,
               refund_items = EXCLUDED.refund_items,
-              tipo_pedido = EXCLUDED.tipo_pedido,
+              tipo_pedido = CASE
+                WHEN $13::boolean THEN EXCLUDED.tipo_pedido
+                WHEN pedidos.tipo_pedido = 'pickup' THEN pedidos.tipo_pedido
+                ELSE EXCLUDED.tipo_pedido
+              END,
               delivery_address = EXCLUDED.delivery_address,
               delivery_city = EXCLUDED.delivery_city,
               delivery_postcode = EXCLUDED.delivery_postcode`,
@@ -891,7 +896,8 @@ async function processShipdayWebhook(req, res, restauranteId, config) {
               tipoPedido,
               deliveryAddress,
               deliveryCity,
-              deliveryPostcode
+              deliveryPostcode,
+              tipoPedidoExplicito
             ]
           );
 
