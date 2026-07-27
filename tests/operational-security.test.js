@@ -8,7 +8,10 @@ const {
   verifyShipdaySecret
 } = require('../lib/webhook-security');
 const {
+  OPERATIONAL_WOO_ORDER_STATUSES,
   detectarTipoPedidoWoo,
+  normalizeWooOrderStatus,
+  shouldAcceptWooOrder,
   shouldIgnoreWooOrder,
   buildWooOrderItems
 } = require('../lib/order-utils');
@@ -131,7 +134,7 @@ test('secreto Shipday acepta header o query y rechaza valores incorrectos', () =
   assert.equal(verifyShipdaySecret({ headers: {}, query: { secret: 's1' } }, 's2'), false);
 });
 
-test('detección central conserva pickup, delivery y pending', () => {
+test('detección central conserva pickup y delivery', () => {
   assert.equal(detectarTipoPedidoWoo({
     shipping_lines: [{ method_id: 'local_pickup', method_title: 'Pickup' }]
   }), 'pickup');
@@ -142,8 +145,6 @@ test('detección central conserva pickup, delivery y pending', () => {
   }), 'delivery');
 
   assert.equal(detectarTipoPedidoWoo({ shipping_lines: [] }), 'delivery');
-  assert.equal(shouldIgnoreWooOrder({ status: 'cancelled' }), true);
-  assert.equal(shouldIgnoreWooOrder({ status: 'pending' }), false);
 
   assert.deepEqual(buildWooOrderItems({
     line_items: [{
@@ -152,4 +153,37 @@ test('detección central conserva pickup, delivery y pending', () => {
       meta_data: [{ key: 'Salsa', value: 'Verde' }]
     }]
   }), [{ nombre: 'Taco (Salsa: Verde)', cantidad: 2 }]);
+});
+
+test('solo processing y completed son estados Woo operativos', () => {
+  assert.deepEqual(
+    [...OPERATIONAL_WOO_ORDER_STATUSES],
+    ['processing', 'completed']
+  );
+
+  for (const status of ['processing', 'completed', ' Processing ', 'COMPLETED']) {
+    assert.equal(normalizeWooOrderStatus(status), status.trim().toLowerCase());
+    assert.equal(shouldAcceptWooOrder({ status }), true);
+    assert.equal(shouldIgnoreWooOrder({ status }), false);
+  }
+
+  for (const status of [
+    'pending',
+    'on-hold',
+    'failed',
+    'cancelled',
+    'checkout-draft',
+    'draft',
+    'auto-draft',
+    '',
+    undefined,
+    null,
+    'unknown-status'
+  ]) {
+    assert.equal(shouldAcceptWooOrder({ status }), false);
+    assert.equal(shouldIgnoreWooOrder({ status }), true);
+  }
+
+  assert.equal(shouldAcceptWooOrder(null), false);
+  assert.equal(shouldIgnoreWooOrder(null), true);
 });

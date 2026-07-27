@@ -353,8 +353,7 @@ data.forEach(p => {
     // filtros
     if (tabActual === 'recientes') {
       pedidosFiltrados = data.filter(p =>
-        (p.estado || '').toLowerCase().trim() === 'processing' ||
-        (p.estado || '').toLowerCase().trim() === 'pending'
+        (p.estado || '').toLowerCase().trim() === 'processing'
       );
     }
 

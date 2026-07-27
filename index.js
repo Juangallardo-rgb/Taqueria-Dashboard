@@ -45,7 +45,7 @@ const {
   detectarTipoPedidoWoo,
   buildWooOrderItems,
   getWooDeliveryAddress,
-  shouldIgnoreWooOrder
+  shouldAcceptWooOrder
 } = require('./lib/order-utils');
 const { createRestaurantProductCache } = require('./lib/product-cache');
 const {
@@ -559,16 +559,13 @@ async function processWooOrderWebhook(req, res, restauranteId) {
     });
   }
 
-  if (shouldIgnoreWooOrder(order)) {
+  if (!shouldAcceptWooOrder(order)) {
     return res.status(200).json({
       success: true,
       ignored: true,
       status: order.status
     });
   }
-
-  // `pending` se conserva: Stripe/Woo puede publicar la orden antes de completar
-  // el pago y las actualizaciones posteriores mantienen el mismo registro.
 
   console.log("🔥 WOO WEBHOOK:", order.id);
   invalidarCachePedidos(restauranteId);
@@ -1116,6 +1113,7 @@ app.get('/orders-complete', requireSessionRestaurant, async (req, res) => {
        AND d.order_number::text = p.woo_order_id::text
 
       WHERE p.restaurante_id = $1
+        AND LOWER(TRIM(COALESCE(p.estado, ''))) IN ('processing', 'completed')
 
       ORDER BY p.created_at DESC
     `, [restaurante_id]).then(result => result.rows);
@@ -1152,6 +1150,7 @@ app.get('/orders-latest', requireSessionRestaurant, async (req, res) => {
       `SELECT id, woo_order_id, created_at
        FROM pedidos
        WHERE restaurante_id = $1
+         AND LOWER(TRIM(COALESCE(estado, ''))) IN ('processing', 'completed')
        ORDER BY id DESC
        LIMIT 1`,
       [restauranteId]
