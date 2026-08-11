@@ -22,20 +22,38 @@ const analyticsSource = fs.readFileSync(path.join(root, 'lib', 'admin-analytics.
 
 const fixedNow = new Date('2026-08-11T15:30:00.000Z');
 
-function createAnalyticsPool() {
+function assertPostgresParametersAreContiguous(sql, params) {
+  const indexes = new Set(Array.from(sql.matchAll(/\$(\d+)/g), match => Number(match[1])));
+  const maxIndex = Math.max(0, ...indexes);
+  assert.equal(params.length, maxIndex, 'La cantidad de valores debe coincidir con el placeholder máximo');
+  for (let index = 1; index <= maxIndex; index += 1) {
+    assert.ok(indexes.has(index), `El parámetro $${index} no puede quedar sin uso ni tipo`);
+    if (params[index - 1] === null) {
+      assert.match(sql, new RegExp(`\\$${index}\\s*::`), `El parámetro nullable $${index} requiere cast explícito`);
+    }
+  }
+}
+
+function restaurantParameter(sql, params) {
+  return sql.includes('admin-analytics:overview') ? params[3] : params[2];
+}
+
+function createAnalyticsPool({ strictParameters = false } = {}) {
   const calls = [];
   return {
     calls,
     async query(sql, params) {
       calls.push({ sql, params });
+      if (strictParameters) assertPostgresParametersAreContiguous(sql, params);
+      const restauranteId = restaurantParameter(sql, params);
       if (sql.includes('admin-analytics:overview')) {
         return { rows: [{
           gross_sales: '300.00', refunds_amount: '20.00', orders: 3,
           pickup_orders: 1, delivery_orders: 2, refunds_count: 1,
           previous_gross_sales: '200.00', previous_refunds_amount: '0',
-          total_restaurants: params[3] ? 1 : 3,
-          open_restaurants: params[3] ? 1 : 2,
-          closed_restaurants: params[3] ? 0 : 1
+          total_restaurants: restauranteId ? 1 : 3,
+          open_restaurants: restauranteId ? 1 : 2,
+          closed_restaurants: restauranteId ? 0 : 1
         }] };
       }
       if (sql.includes('admin-analytics:restaurants')) {
@@ -44,7 +62,7 @@ function createAnalyticsPool() {
           { id: 4, nombre: 'Cuatro', abierto: true, activo: true, gross_sales: '110', refunds_amount: '0', orders: 1, refunds_count: 0, pickup_orders: 0, delivery_orders: 1, last_order_at: fixedNow, last_woo_order_id: '77' },
           { id: 5, nombre: 'Cinco', abierto: false, activo: true, gross_sales: '70', refunds_amount: '0', orders: 1, refunds_count: 0, pickup_orders: 0, delivery_orders: 1, last_order_at: fixedNow, last_woo_order_id: '88' }
         ];
-        return { rows: params[3] ? rows.filter(row => row.id === params[3]) : rows };
+        return { rows: restauranteId ? rows.filter(row => row.id === restauranteId) : rows };
       }
       if (sql.includes('admin-analytics:latest-orders')) {
         const rows = [
@@ -52,7 +70,7 @@ function createAnalyticsPool() {
           { id: 202, restaurante_id: 4, restaurante_nombre: 'Cuatro', woo_order_id: '77', customer_name: 'B', total: '110', estado: 'completed', refunded: false, created_at: fixedNow, order_type: 'delivery' },
           { id: 303, restaurante_id: 5, restaurante_nombre: 'Cinco', woo_order_id: '88', customer_name: 'C', total: '70', estado: 'processing', refunded: false, created_at: fixedNow, order_type: 'delivery' }
         ];
-        return { rows: params[3] ? rows.filter(row => row.restaurante_id === params[3]) : rows };
+        return { rows: restauranteId ? rows.filter(row => row.restaurante_id === restauranteId) : rows };
       }
       if (sql.includes('admin-analytics:timeline')) {
         return { rows: [{ bucket: '2026-08-11 15:00:00', gross_sales: '300', refunds_amount: '20', orders: 3 }] };
@@ -141,7 +159,26 @@ test('filtro de restaurante viaja como parámetro y limita latest orders', async
   const snapshot = await analytics.getDashboardSnapshot({ range: 'today', restaurant_id: '4' });
   assert.deepEqual(snapshot.restaurants.map(row => row.id), [4]);
   assert.deepEqual(snapshot.latest_orders.map(row => row.restaurante_id), [4]);
-  assert.ok(pool.calls.every(call => call.params[3] === 4));
+  assert.ok(pool.calls.every(call => restaurantParameter(call.sql, call.params) === 4));
+});
+
+test('GET /admin/api/dashboard usa parámetros PostgreSQL contiguos para todos los rangos y el detalle', async () => {
+  const pool = createAnalyticsPool({ strictParameters: true });
+  const analytics = createAdminAnalytics({
+    pool,
+    env: { ADMIN_DASHBOARD_TIMEZONE: 'America/Los_Angeles' },
+    now: () => fixedNow
+  });
+
+  for (const range of ['today', 'yesterday', '7d', '30d']) {
+    const snapshot = await analytics.getDashboardSnapshot({ range });
+    assert.equal(snapshot.range.key, range);
+  }
+
+  const detail = await analytics.getDashboardSnapshot({ range: 'today', restaurant_id: '4' });
+  assert.deepEqual(detail.restaurants.map(row => row.id), [4]);
+  assert.equal(pool.calls.length, 20);
+  assert.match(indexSource, /app\.get\('\/admin\/api\/dashboard'/);
 });
 
 test('cache deduplica snapshots y una nueva orden la invalida', async () => {
