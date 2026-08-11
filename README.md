@@ -72,6 +72,41 @@ unicidad global después de que dos restaurantes compartan IDs externos.
 7. Probar pickup, delivery, producto, Bridge, push y refund en entorno controlado.
 8. Confirmar aislamiento usando IDs repetidos antes de activar el restaurante.
 
+## Dashboard administrativo analítico
+
+`/admin` conserva el shell y la gestión operativa existente, pero su vista
+principal usa un snapshot agregado protegido por rol ADMIN:
+
+- `GET /admin/api/dashboard`: acepta `range=today|yesterday|7d|30d` o
+  `range=custom&start=YYYY-MM-DD&end=YYYY-MM-DD`; `restaurant_id` es un filtro
+  analítico posterior a la autorización, no una identidad de sesión.
+- `GET /admin/events`: stream SSE en memoria con eventos mínimos de órdenes,
+  refunds, deliveries y estado abierto/cerrado. No contiene credenciales.
+- `/admin/restaurants` y `/admin/restaurants/:id`: mantienen creación, edición,
+  configuración Woo/Shipday y generación de secretos.
+- `/admin/analytics/restaurants/:id`: detalle analítico de un restaurante sin
+  reutilizar una sesión operativa de restaurante.
+
+Las consultas analíticas cuentan únicamente estados `processing` y
+`completed`, igual que el flujo operativo actual. Ventas brutas es la suma de
+`pedidos.total`; refunds es la suma de `refund_amount` cuando `refunded=true`;
+ventas netas es bruto menos refunds; ticket promedio es ventas netas dividido
+por órdenes válidas. `pending`, `failed`, `cancelled` y estados desconocidos no
+se incluyen.
+
+El snapshot ejecuta cuatro consultas PostgreSQL agregadas en paralelo y usa
+una caché en memoria de 5 segundos por rango y restaurante. Las escrituras
+operativas existentes solo añaden una invalidación y un evento posterior al
+éxito. Si SSE se desconecta, el frontend reconecta con backoff exponencial y
+activa temporalmente un único snapshot cada 15 segundos.
+
+La base actual no contiene timezone por restaurante. El rango general usa
+`ADMIN_DASHBOARD_TIMEZONE` cuando existe; de lo contrario usa `UTC` y lo indica
+en la interfaz y en la respuesta (`timezone.source=default_utc`). No se añadió
+una zona horaria silenciosa ni una migración. El índice existente
+`idx_pedidos_restaurante_created_at` y los índices compuestos de deliveries
+cubren las consultas nuevas, por lo que no se requiere un índice adicional.
+
 ### Validación local
 
 ```powershell

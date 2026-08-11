@@ -48,6 +48,8 @@ const {
   shouldAcceptWooOrder
 } = require('./lib/order-utils');
 const { createRestaurantProductCache } = require('./lib/product-cache');
+const { createAdminAnalytics, AdminAnalyticsError } = require('./lib/admin-analytics');
+const { createAdminEventHub } = require('./lib/admin-events');
 const {
   ProductMutationError,
   createProductCrudService
@@ -124,6 +126,13 @@ const {
 
 const productCache = createRestaurantProductCache();
 const productCrud = createProductCrudService({ pool, cache: productCache });
+const adminAnalytics = createAdminAnalytics({ pool });
+const adminEvents = createAdminEventHub();
+
+function publishAdminEvent(type, payload) {
+  adminAnalytics.invalidate();
+  return adminEvents.publish(type, payload);
+}
 
 function sendOperationalError(res, error) {
   return res.status(error.statusCode || 500).json({
@@ -583,7 +592,7 @@ async function processWooOrderWebhook(req, res, restauranteId) {
     // ✅ GUARDAR ORDEN COMO YA FUNCIONA ACTUALMENTE
     // No se toca items ni refund_items
     // ======================================================
-    await pool.query(
+    const wooOrderWrite = await pool.query(
   `INSERT INTO pedidos 
    (
      restaurante_id,
@@ -611,7 +620,8 @@ async function processWooOrderWebhook(req, res, restauranteId) {
      tipo_pedido = EXCLUDED.tipo_pedido,
      delivery_address = EXCLUDED.delivery_address,
      delivery_city = EXCLUDED.delivery_city,
-     delivery_postcode = EXCLUDED.delivery_postcode`,
+     delivery_postcode = EXCLUDED.delivery_postcode
+   RETURNING id, created_at, (xmax = 0) AS inserted`,
   [
     restauranteId,
     order.total,
@@ -627,6 +637,19 @@ async function processWooOrderWebhook(req, res, restauranteId) {
     deliveryPostcode
   ]
 );
+
+    const storedWooOrder = wooOrderWrite.rows[0];
+    publishAdminEvent(storedWooOrder?.inserted ? 'order_created' : 'order_updated', {
+      restaurante_id: restauranteId,
+      order: {
+        woo_order_id: order.id,
+        total: order.total,
+        estado: order.status,
+        customer_name: `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
+        order_type: tipoPedido,
+        created_at: storedWooOrder?.created_at || new Date().toISOString()
+      }
+    });
 
     console.log("✅ WOO GUARDADO CON ITEMS:", order.id);
 
@@ -808,6 +831,12 @@ async function processShipdayWebhook(req, res, restauranteId, config) {
     );
 
     invalidarCachePedidos(restauranteId);
+    publishAdminEvent('delivery_updated', {
+      restaurante_id: restauranteId,
+      order_number: normalizedOrderNumber,
+      status: data.order_status || data.status || null,
+      driver_name: driverName
+    });
 
     console.log("🚚 SHIPDAY OK (delivery actualizado)");
 
@@ -847,7 +876,7 @@ async function processShipdayWebhook(req, res, restauranteId, config) {
           } = resolverTipoPedidoWoo(order);
 
           // 🔥 3. INSERTAR / ACTUALIZAR PEDIDO DESDE WOO
-          await pool.query(
+          const shipdayOrderWrite = await pool.query(
             `INSERT INTO pedidos 
             (
               restaurante_id,
@@ -880,7 +909,8 @@ async function processShipdayWebhook(req, res, restauranteId, config) {
               END,
               delivery_address = EXCLUDED.delivery_address,
               delivery_city = EXCLUDED.delivery_city,
-              delivery_postcode = EXCLUDED.delivery_postcode`,
+              delivery_postcode = EXCLUDED.delivery_postcode
+            RETURNING id, created_at, (xmax = 0) AS inserted`,
             [
               restauranteId,
               order.total,
@@ -899,6 +929,18 @@ async function processShipdayWebhook(req, res, restauranteId, config) {
           );
 
           invalidarCachePedidos(restauranteId);
+          const storedShipdayOrder = shipdayOrderWrite.rows[0];
+          publishAdminEvent(storedShipdayOrder?.inserted ? 'order_created' : 'order_updated', {
+            restaurante_id: restauranteId,
+            order: {
+              woo_order_id: order.id,
+              total: order.total,
+              estado: order.status,
+              customer_name: `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
+              order_type: tipoPedido,
+              created_at: storedShipdayOrder?.created_at || new Date().toISOString()
+            }
+          });
 
           console.log("🔥 PEDIDO COMPLETO GUARDADO DESDE SHIPDAY:", order.id);
 
@@ -1376,6 +1418,36 @@ app.get('/admin', (req, res) => {
   res.sendFile(__dirname + '/admin.html');
 });
 
+// El panel administrativo es una SPA. Estas rutas visuales comparten el mismo
+// shell; los endpoints operativos en /admin/restaurantes se conservan intactos.
+app.get('/admin/restaurants', (req, res) => {
+  res.sendFile(__dirname + '/admin.html');
+});
+
+app.get('/admin/restaurants/:id', (req, res) => {
+  res.sendFile(__dirname + '/admin.html');
+});
+
+app.get('/admin/analytics/restaurants/:id', (req, res) => {
+  res.sendFile(__dirname + '/admin.html');
+});
+
+app.get('/admin/users', (req, res) => {
+  res.sendFile(__dirname + '/admin.html');
+});
+
+app.get('/admin/assets/admin.css', (req, res) => {
+  res.sendFile(path.join(__dirname, 'admin.css'));
+});
+
+app.get('/admin/assets/admin.js', (req, res) => {
+  res.sendFile(path.join(__dirname, 'admin.js'));
+});
+
+app.get('/admin/events', (req, res) => {
+  adminEvents.subscribe(req, res);
+});
+
 app.get('/estado-restaurante', requireSessionRestaurant, async (req, res) => {
 
   const result = await pool.query(
@@ -1394,6 +1466,11 @@ app.post('/toggle-restaurante', requireSessionRestaurant, async (req, res) => {
     WHERE id = $1
     RETURNING abierto
   `, [req.restaurant.id]);
+
+  publishAdminEvent('restaurant_status_changed', {
+    restaurante_id: req.restaurant.id,
+    abierto: result.rows[0]?.abierto
+  });
 
   res.json(result.rows[0]);
 
@@ -1481,14 +1558,15 @@ app.post('/complete-order/:id', requireSessionRestaurant, requireWooOperationalC
 
     // 🔥 1. TRAER EL woo_order_id REAL
     const result = await pool.query(
-      `SELECT woo_order_id
+      `SELECT woo_order_id, total, customer_name, tipo_pedido, created_at
        FROM pedidos
        WHERE id = $1
          AND restaurante_id = $2`,
       [id, restauranteId]
     );
 
-    const wooId = result.rows[0]?.woo_order_id;
+    const completedOrder = result.rows[0];
+    const wooId = completedOrder?.woo_order_id;
 
     // 🔥 2. ACTUALIZAR TU BD
     await pool.query(
@@ -1515,6 +1593,17 @@ app.post('/complete-order/:id', requireSessionRestaurant, requireWooOperationalC
     console.log("✅ COMPLETADO LOCAL + WOO:", id);
 
     invalidarCachePedidos(restauranteId);
+    publishAdminEvent('order_updated', {
+      restaurante_id: restauranteId,
+      order: {
+        woo_order_id: wooId,
+        total: completedOrder?.total,
+        estado: 'completed',
+        customer_name: completedOrder?.customer_name,
+        order_type: completedOrder?.tipo_pedido,
+        created_at: completedOrder?.created_at || new Date().toISOString()
+      }
+    });
 
     res.json({ success: true });
 
@@ -1523,6 +1612,75 @@ app.post('/complete-order/:id', requireSessionRestaurant, requireWooOperationalC
     res.status(500).send("Error");
   }
 });
+// Snapshot analítico centralizado. /admin ya exige una sesión ADMIN antes de
+// llegar a este handler; restaurant_id es únicamente un filtro analítico.
+app.get('/admin/api/dashboard', async (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  try {
+    const snapshot = await adminAnalytics.getDashboardSnapshot(req.query);
+    return res.json(snapshot);
+  } catch (error) {
+    console.error('Error cargando analytics administrativo:', error.message);
+    const statusCode = error instanceof AdminAnalyticsError
+      ? error.statusCode
+      : 500;
+    return res.status(statusCode).json({
+      success: false,
+      message: error instanceof AdminAnalyticsError
+        ? error.message
+        : 'Error cargando analytics administrativos',
+      code: error.code || 'ADMIN_ANALYTICS_QUERY_FAILED'
+    });
+  }
+});
+
+// Contrato liviano conservado para compatibilidad con la primera versión del
+// Overview. Tampoco selecciona credenciales, tokens o secretos.
+app.get('/admin/overview', async (req, res) => {
+  try {
+    const [restaurantResult, userResult, recentResult] = await Promise.all([
+      pool.query(
+        `SELECT
+           COUNT(*)::integer AS total,
+           COUNT(*) FILTER (WHERE activo IS NOT FALSE)::integer AS activos,
+           COUNT(*) FILTER (WHERE activo IS FALSE)::integer AS inactivos
+         FROM restaurantes`
+      ),
+      pool.query('SELECT COUNT(*)::integer AS total FROM usuarios'),
+      pool.query(
+        `SELECT id, nombre, logo_url, activo, created_at
+         FROM restaurantes
+         ORDER BY created_at DESC NULLS LAST, id DESC
+         LIMIT 5`
+      )
+    ]);
+
+    const restaurants = restaurantResult.rows[0] || {};
+
+    return res.json({
+      totals: {
+        restaurants: Number(restaurants.total || 0),
+        active_restaurants: Number(restaurants.activos || 0),
+        inactive_restaurants: Number(restaurants.inactivos || 0),
+        users: Number(userResult.rows[0]?.total || 0)
+      },
+      recent_restaurants: recentResult.rows.map(restaurant => ({
+        id: Number(restaurant.id),
+        nombre: restaurant.nombre,
+        logo_url: restaurant.logo_url,
+        activo: restaurant.activo !== false,
+        created_at: restaurant.created_at
+      }))
+    });
+  } catch (error) {
+    console.error('Error cargando overview administrativo:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Error cargando el resumen administrativo'
+    });
+  }
+});
+
 app.post('/admin/restaurantes', async (req, res) => {
 
   const { nombre, logo_url, woo_url, consumer_key, consumer_secret, shipday_api } = req.body;
@@ -1550,6 +1708,8 @@ app.post('/admin/restaurantes', async (req, res) => {
       ]
     );
 
+    adminAnalytics.invalidate();
+
     res.status(201).json({ success: true });
 
   } catch (err) {
@@ -1564,6 +1724,7 @@ app.post('/admin/restaurantes', async (req, res) => {
 app.get('/admin/restaurantes', async (req, res) => {
 
   try {
+    res.set('Cache-Control', 'no-store');
     const result = await pool.query(
       `SELECT
          id,
@@ -1606,6 +1767,95 @@ app.get('/admin/restaurantes', async (req, res) => {
     });
   }
 
+});
+
+// Listado para la sección Restaurantes. Deliberadamente excluye toda
+// credencial, incluso enmascarada; esos datos solo pertenecen al detalle.
+app.get('/admin/restaurantes-resumen', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, nombre, logo_url, woo_url, activo, created_at, updated_at
+       FROM restaurantes
+       ORDER BY id DESC`
+    );
+
+    return res.json(result.rows.map(restaurant => ({
+      id: Number(restaurant.id),
+      nombre: restaurant.nombre,
+      logo_url: restaurant.logo_url,
+      woo_url: restaurant.woo_url,
+      activo: restaurant.activo !== false,
+      created_at: restaurant.created_at,
+      updated_at: restaurant.updated_at
+    })));
+  } catch (error) {
+    console.error('Error listando resumen de restaurantes:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Error listando restaurantes'
+    });
+  }
+});
+
+// Detalle protegido para la configuración individual. Mantiene la política
+// existente: los secretos nunca se devuelven completos.
+app.get('/admin/restaurantes/:id', async (req, res) => {
+  const restauranteId = Number(req.params.id);
+
+  if (!Number.isInteger(restauranteId) || restauranteId <= 0) {
+    return res.status(400).json({ success: false, message: 'Restaurante inválido' });
+  }
+
+  try {
+    res.set('Cache-Control', 'no-store');
+    const result = await pool.query(
+      `SELECT
+         id,
+         nombre,
+         logo_url,
+         woo_url,
+         activo,
+         created_at,
+         updated_at,
+         consumer_key,
+         consumer_secret,
+         shipday_api,
+         webhook_token,
+         woo_webhook_secret,
+         shipday_webhook_secret
+       FROM restaurantes
+       WHERE id = $1
+       LIMIT 1`,
+      [restauranteId]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, message: 'Restaurante no encontrado' });
+    }
+
+    const restaurant = result.rows[0];
+    return res.json({
+      id: Number(restaurant.id),
+      nombre: restaurant.nombre,
+      logo_url: restaurant.logo_url,
+      woo_url: restaurant.woo_url,
+      activo: restaurant.activo !== false,
+      created_at: restaurant.created_at,
+      updated_at: restaurant.updated_at,
+      consumer_key: maskSecret(restaurant.consumer_key),
+      consumer_secret: maskSecret(restaurant.consumer_secret),
+      shipday_api: maskSecret(restaurant.shipday_api),
+      webhook_token: maskSecret(restaurant.webhook_token),
+      woo_webhook_secret: maskSecret(restaurant.woo_webhook_secret),
+      shipday_webhook_secret: maskSecret(restaurant.shipday_webhook_secret)
+    });
+  } catch (error) {
+    console.error('Error cargando restaurante:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Error cargando el restaurante'
+    });
+  }
 });
 
 app.put('/admin/restaurantes/:id', async (req, res) => {
@@ -1673,6 +1923,8 @@ app.put('/admin/restaurantes/:id', async (req, res) => {
     if (!result.rows.length) {
       return res.status(404).json({ success: false, message: 'Restaurante no encontrado' });
     }
+
+    adminAnalytics.invalidate();
 
     return res.json({ success: true, restaurante: result.rows[0] });
   } catch (error) {
@@ -1916,6 +2168,11 @@ app.post('/refund', requireSessionRestaurant, requireWooOperationalConfig, async
     );
 
     invalidarCachePedidos(restauranteId);
+    publishAdminEvent('refund_updated', {
+      restaurante_id: restauranteId,
+      woo_order_id: finalOrderId,
+      refund_amount: Number(amount)
+    });
 
     res.json({
       success: true,

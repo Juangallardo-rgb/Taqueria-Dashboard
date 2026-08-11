@@ -2,301 +2,101 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Admin - Sistema</title>
-  
-  <style>
-    body {
-      font-family: Arial;
-      padding: 20px;
-      background: #f5f5f5;
-    }
-
-    h1, h2 {
-      margin-top: 30px;
-    }
-
-    input {
-      display: block;
-      margin: 5px 0;
-      padding: 8px;
-      width: 300px;
-    }
-
-    button {
-      padding: 10px;
-      background: #28a745;
-      color: white;
-      border: none;
-      cursor: pointer;
-      margin-top: 5px;
-    }
-
-    .card {
-      background: white;
-      padding: 10px;
-      margin: 10px 0;
-      border-radius: 8px;
-      border: 1px solid #ddd;
-    }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#171716">
+  <title>Administración · Denix</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/admin/assets/admin.css">
 </head>
+<body>
+  <div class="auth-loader" id="authLoader" role="status" aria-live="polite">
+    <div class="loader-mark">D</div>
+    <p>Preparando tu espacio de trabajo</p>
+  </div>
 
-<body style="display:none;">
-
-<h1>Panel Admin</h1>
-
-<!-- ========================= -->
-<!-- CREAR RESTAURANTE -->
-<!-- ========================= -->
-
-<h2>Crear Restaurante</h2>
-
-<input id="nombre" placeholder="Nombre">
-<input id="logo" placeholder="URL Logo">
-<input id="woo" placeholder="Woo URL">
-<input id="ck" placeholder="Consumer Key">
-<input id="cs" placeholder="Consumer Secret">
-<input id="shipday" placeholder="Shipday API">
-
-<button onclick="crearRestaurante()">Crear Restaurante</button>
-
-<hr>
-
-<h2>Restaurantes</h2>
-<div id="lista"></div>
-
-<!-- ========================= -->
-<!-- CREAR USUARIO -->
-<!-- ========================= -->
-
-<h2>Crear Usuario</h2>
-
-<input id="emailUser" placeholder="Email">
-<input id="passUser" placeholder="Password">
-<input id="restUser" placeholder="ID Restaurante">
-
-<button onclick="crearUsuario()">Crear Usuario</button>
-
-<hr>
-
-<h2>Usuarios</h2>
-<div id="listaUsuarios"></div>
-
-<!-- ========================= -->
-<!-- SCRIPT -->
-<!-- ========================= -->
-
-<script>
-
-/////////////////////////////
-// RESTAURANTES
-/////////////////////////////
-
-let restaurantesActuales = [];
-
-async function crearRestaurante() {
-
-  const data = {
-    nombre: document.getElementById('nombre').value,
-    logo_url: document.getElementById('logo').value,
-    woo_url: document.getElementById('woo').value,
-    consumer_key: document.getElementById('ck').value,
-    consumer_secret: document.getElementById('cs').value,
-    shipday_api: document.getElementById('shipday').value
-  };
-
-  await fetch('/admin/restaurantes', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  });
-
-  alert('Restaurante creado');
-
-  limpiarCamposRestaurante();
-  cargarRestaurantes();
-}
-
-
-function limpiarCamposRestaurante() {
-  document.getElementById('nombre').value = '';
-  document.getElementById('logo').value = '';
-  document.getElementById('woo').value = '';
-  document.getElementById('ck').value = '';
-  document.getElementById('cs').value = '';
-  document.getElementById('shipday').value = '';
-}
-
-
-async function cargarRestaurantes() {
-
-  const res = await fetch('/admin/restaurantes');
-  const data = await res.json();
-  restaurantesActuales = data;
-
-  const cont = document.getElementById('lista');
-  cont.innerHTML = '';
-
-  data.forEach(r => {
-    cont.innerHTML += `
-      <div class="card">
-        <b>${r.nombre}</b><br>
-        ID: ${r.id}<br>
-        Woo: ${r.woo_url || 'Sin configurar'}<br>
-        Estado: ${r.activo ? 'Activo' : 'Inactivo'}<br>
-        Consumer Key: ${r.consumer_key || 'Sin configurar'}<br>
-        Consumer Secret: ${r.consumer_secret || 'Sin configurar'}<br>
-        Shipday API: ${r.shipday_api || 'Sin configurar'}<br>
-        Webhook token: ${r.webhook_token || 'Sin configurar'}<br>
-        Woo webhook secret: ${r.woo_webhook_secret || 'Sin configurar'}<br>
-        Shipday webhook secret: ${r.shipday_webhook_secret || 'Sin configurar'}<br>
-        <button onclick="editarRestaurante(${r.id})">Editar</button>
-        <button onclick="generarSecretos(${r.id})">Generar secretos</button>
+  <div class="admin-app" id="adminApp" hidden>
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">D</div>
+        <div>
+          <strong>Denix</strong>
+          <span>Admin console</span>
+        </div>
       </div>
-    `;
-  });
-}
 
-async function editarRestaurante(id) {
-  const actual = restaurantesActuales.find(r => Number(r.id) === Number(id));
-  if (!actual) return;
+      <nav class="primary-nav" aria-label="Navegación administrativa">
+        <a class="nav-link" href="/admin" data-route="overview">
+          <span class="nav-icon" data-icon="overview" aria-hidden="true"></span>
+          <span>Overview</span>
+        </a>
+        <a class="nav-link" href="/admin/restaurants" data-route="restaurants">
+          <span class="nav-icon" data-icon="restaurants" aria-hidden="true"></span>
+          <span>Restaurantes</span>
+        </a>
+        <a class="nav-link" href="/admin/users" data-route="users">
+          <span class="nav-icon" data-icon="users" aria-hidden="true"></span>
+          <span>Usuarios</span>
+        </a>
+      </nav>
 
-  const data = {
-    nombre: prompt('Nombre', actual.nombre || ''),
-    logo_url: prompt('URL del logo', actual.logo_url || ''),
-    woo_url: prompt('Woo URL', actual.woo_url || ''),
-    consumer_key: prompt('Consumer Key (vacío o enmascarado conserva el actual)', actual.consumer_key || ''),
-    consumer_secret: prompt('Consumer Secret (vacío o enmascarado conserva el actual)', actual.consumer_secret || ''),
-    shipday_api: prompt('Shipday API (vacío o enmascarado conserva el actual)', actual.shipday_api || ''),
-    webhook_token: prompt('Webhook token (vacío o enmascarado conserva el actual)', actual.webhook_token || ''),
-    woo_webhook_secret: prompt('Woo webhook secret (vacío o enmascarado conserva el actual)', actual.woo_webhook_secret || ''),
-    shipday_webhook_secret: prompt('Shipday webhook secret (vacío o enmascarado conserva el actual)', actual.shipday_webhook_secret || ''),
-    activo: confirm('Aceptar = restaurante activo. Cancelar = inactivo.')
-  };
-
-  if (data.nombre === null) return;
-
-  const res = await fetch(`/admin/restaurantes/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  });
-  const result = await res.json();
-
-  if (!res.ok) {
-    alert(result.message || 'No se pudo actualizar el restaurante');
-    return;
-  }
-
-  await cargarRestaurantes();
-}
-
-async function generarSecretos(id) {
-  if (!confirm('Se reemplazarán los tres secretos de webhook. ¿Continuar?')) return;
-
-  const res = await fetch(`/admin/restaurantes/${id}/generar-secretos`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({})
-  });
-  const result = await res.json();
-
-  if (!res.ok) {
-    alert(result.message || 'No se pudieron generar los secretos');
-    return;
-  }
-
-  alert('Secretos generados. Por seguridad solo se mostrarán enmascarados.');
-  await cargarRestaurantes();
-}
-
-
-/////////////////////////////
-// USUARIOS
-/////////////////////////////
-
-async function crearUsuario() {
-
-  const data = {
-    email: document.getElementById('emailUser').value,
-    password: document.getElementById('passUser').value,
-    restaurante_id: document.getElementById('restUser').value
-  };
-
-  await fetch('/admin/usuarios', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  });
-
-  alert('Usuario creado');
-
-  limpiarCamposUsuario();
-  cargarUsuarios();
-}
-
-
-function limpiarCamposUsuario() {
-  document.getElementById('emailUser').value = '';
-  document.getElementById('passUser').value = '';
-  document.getElementById('restUser').value = '';
-}
-
-
-async function cargarUsuarios() {
-
-  const res = await fetch('/admin/usuarios');
-  const data = await res.json();
-
-  const cont = document.getElementById('listaUsuarios');
-  cont.innerHTML = '';
-
-  data.forEach(u => {
-    cont.innerHTML += `
-      <div class="card">
-        <b>${u.email}</b><br>
-        Restaurante: ${u.nombre} (ID ${u.restaurante_id})
+      <div class="sidebar-footer">
+        <div class="admin-profile">
+          <span class="profile-avatar" id="profileAvatar">A</span>
+          <div>
+            <strong id="profileName">Administrador</strong>
+            <span id="profileEmail">—</span>
+          </div>
+        </div>
+        <button class="icon-button" id="logoutButton" type="button" aria-label="Cerrar sesión" title="Cerrar sesión">
+          <span data-icon="logout" aria-hidden="true"></span>
+        </button>
       </div>
-    `;
-  });
-}
+    </aside>
 
+    <div class="app-column">
+      <header class="admin-topbar">
+        <div class="topbar-title">
+          <strong>DENIX</strong>
+          <span>Admin Dashboard</span>
+        </div>
+        <div class="topbar-actions">
+          <span class="topbar-date" id="topbarDate">—</span>
+          <span class="live-indicator connecting" id="liveIndicator"><i></i><span>CONNECTING</span></span>
+          <button class="icon-button topbar-refresh" id="refreshButton" data-refresh-dashboard type="button" aria-label="Refrescar dashboard" title="Refrescar">
+            <span data-icon="refresh" aria-hidden="true"></span>
+          </button>
+          <div class="topbar-user">
+            <span class="profile-avatar small" id="topbarAvatar">A</span>
+            <div><strong id="topbarUser">Administrador</strong><span>Administrador</span></div>
+          </div>
+        </div>
+      </header>
 
-/////////////////////////////
-// INIT
-/////////////////////////////
+      <header class="mobile-header">
+        <button class="icon-button" id="menuButton" type="button" aria-label="Abrir menú">
+          <span data-icon="menu" aria-hidden="true"></span>
+        </button>
+        <div class="mobile-brand"><span>D</span> Denix <i class="mobile-live" id="mobileLiveIndicator" title="Conectando actualizaciones"></i></div>
+        <div class="mobile-actions"><button class="icon-button" data-refresh-dashboard type="button" aria-label="Refrescar dashboard"><span data-icon="refresh"></span></button><div class="profile-avatar small" id="mobileAvatar">A</div></div>
+      </header>
 
-async function iniciarAdmin() {
-  try {
-    const res = await fetch('/session', { cache: 'no-store' });
+      <main class="main-content" id="mainContent" tabindex="-1"></main>
+    </div>
+  </div>
 
-    if (!res.ok) {
-      window.location.replace('/');
-      return;
-    }
+  <div class="sidebar-scrim" id="sidebarScrim" hidden></div>
+  <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
+  <div class="modal-root" id="modalRoot"></div>
 
-    const data = await res.json();
-
-    if (!data.authenticated || data.user?.rol !== 'admin') {
-      document.body.innerHTML = '<h1>Acceso denegado</h1><p>Se requiere una sesión administrativa.</p>';
-      document.body.style.display = 'block';
-      return;
-    }
-
-    document.body.style.display = 'block';
-    await Promise.all([
-      cargarRestaurantes(),
-      cargarUsuarios()
-    ]);
-  } catch (error) {
-    document.body.innerHTML = '<h1>Acceso denegado</h1><p>No se pudo validar la sesión.</p>';
-    document.body.style.display = 'block';
-  }
-}
-
-iniciarAdmin();
-
-</script>
-
+  <script src="/admin/assets/admin.js"></script>
+  <script>
+    // Compatibilidad con las acciones globales del panel anterior.
+    window.editarRestaurante = id => window.DenixAdmin.editarRestaurante(id);
+    window.generarSecretos = id => window.DenixAdmin.generarSecretos(id);
+    window.crearRestaurante = event => window.DenixAdmin.crearRestaurante(event);
+    window.crearUsuario = event => window.DenixAdmin.crearUsuario(event);
+  </script>
 </body>
 </html>
