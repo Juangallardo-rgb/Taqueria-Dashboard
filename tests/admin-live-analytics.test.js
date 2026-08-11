@@ -9,7 +9,11 @@ const {
   normalizeOverview,
   createAdminAnalytics
 } = require('../lib/admin-analytics');
-const { sanitizeAdminEvent, createAdminEventHub } = require('../lib/admin-events');
+const {
+  sanitizeAdminEvent,
+  createAdminEventHub,
+  createBestEffortAdminPublisher
+} = require('../lib/admin-events');
 const { createRestaurantContext } = require('../lib/restaurant-context');
 
 const root = path.resolve(__dirname, '..');
@@ -69,6 +73,41 @@ test('filtros today, yesterday, 7d y personalizado producen límites exclusivos 
   const custom = normalizeDashboardRange({ range: 'custom', start: '2026-07-01', end: '2026-07-09' }, options);
   assert.equal(custom.start_at, '2026-07-01T00:00:00.000Z');
   assert.equal(custom.end_at, '2026-07-10T00:00:00.000Z');
+});
+
+test('timezone corporativa America/Los_Angeles aplica PDT y PST automáticamente', async () => {
+  const timezone = 'America/Los_Angeles';
+  const summerOptions = { now: new Date('2026-08-11T15:30:00.000Z'), timezone };
+  const today = normalizeDashboardRange({ range: 'today' }, summerOptions);
+  const yesterday = normalizeDashboardRange({ range: 'yesterday' }, summerOptions);
+  const sevenDays = normalizeDashboardRange({ range: '7d' }, summerOptions);
+  const thirtyDays = normalizeDashboardRange({ range: '30d' }, summerOptions);
+
+  assert.equal(today.start_at, '2026-08-11T07:00:00.000Z');
+  assert.equal(today.end_at, '2026-08-12T07:00:00.000Z');
+  assert.equal(yesterday.start_at, '2026-08-10T07:00:00.000Z');
+  assert.equal(yesterday.end_at, '2026-08-11T07:00:00.000Z');
+  assert.equal(sevenDays.start_at, '2026-08-05T07:00:00.000Z');
+  assert.equal(sevenDays.end_at, '2026-08-12T07:00:00.000Z');
+  assert.equal(thirtyDays.start_at, '2026-07-13T07:00:00.000Z');
+  assert.equal(thirtyDays.end_at, '2026-08-12T07:00:00.000Z');
+
+  const winter = normalizeDashboardRange(
+    { range: 'today' },
+    { now: new Date('2026-01-15T20:00:00.000Z'), timezone }
+  );
+  assert.equal(winter.start_at, '2026-01-15T08:00:00.000Z');
+  assert.equal(winter.end_at, '2026-01-16T08:00:00.000Z');
+
+  const analytics = createAdminAnalytics({
+    pool: createAnalyticsPool(),
+    env: { ADMIN_DASHBOARD_TIMEZONE: timezone },
+    now: () => summerOptions.now
+  });
+  const snapshot = await analytics.getDashboardSnapshot({ range: 'today' });
+  assert.equal(snapshot.timezone.name, timezone);
+  assert.equal(snapshot.timezone.source, 'environment');
+  assert.equal(snapshot.range.start_at, '2026-08-11T07:00:00.000Z');
 });
 
 test('ventas brutas, refunds, netas y ticket se calculan con semántica explícita', () => {
@@ -171,6 +210,77 @@ test('SSE publica order_created al admin sin ningún secreto', () => {
   assert.match(response.output, /"restaurante_id":5/);
   request.emit('close');
   assert.equal(hub.getClientCount(), 0);
+});
+
+function subscribeTestClient(hub) {
+  const request = new EventEmitter();
+  const response = new EventEmitter();
+  response.output = '';
+  response.failWrites = false;
+  response.status = () => response;
+  response.set = () => response;
+  response.write = chunk => {
+    if (response.failWrites) throw new Error('socket roto');
+    response.output += chunk;
+  };
+  response.end = () => { response.writableEnded = true; };
+  hub.subscribe(request, response);
+  return { request, response };
+}
+
+const bestEffortOperationalCases = [
+  ['webhook Woo', 'order_created', { restaurante_id: 1, order: { woo_order_id: 10, total: 20, estado: 'processing', order_type: 'pickup' } }],
+  ['refund', 'refund_updated', { restaurante_id: 1, woo_order_id: 10, refund_amount: 5 }],
+  ['complete-order', 'order_updated', { restaurante_id: 1, order: { woo_order_id: 10, total: 20, estado: 'completed', order_type: 'pickup' } }],
+  ['toggle-restaurante', 'restaurant_status_changed', { restaurante_id: 1, abierto: true }],
+  ['Shipday', 'delivery_updated', { restaurante_id: 1, order_number: 10, status: 'assigned', driver_name: 'Driver' }]
+];
+
+for (const [flow, type, payload] of bestEffortOperationalCases) {
+  test(`fallo response.write no rompe ${flow}`, () => {
+    const hub = createAdminEventHub({ heartbeatMs: 60000 });
+    const broken = subscribeTestClient(hub);
+    broken.response.failWrites = true;
+    let invalidations = 0;
+    const publishAdminEvent = createBestEffortAdminPublisher({
+      analytics: { invalidate() { invalidations += 1; } },
+      events: hub,
+      logger: { warn() {} }
+    });
+
+    assert.doesNotThrow(() => publishAdminEvent(type, payload));
+    assert.equal(invalidations, 1);
+    assert.equal(hub.getClientCount(), 0);
+  });
+}
+
+test('cliente SSE roto se elimina y los demás clientes siguen recibiendo eventos', () => {
+  const hub = createAdminEventHub({ heartbeatMs: 60000 });
+  const broken = subscribeTestClient(hub);
+  const healthy = subscribeTestClient(hub);
+  broken.response.failWrites = true;
+
+  assert.doesNotThrow(() => hub.publish('order_created', {
+    restaurante_id: 4,
+    order: { woo_order_id: 22, total: 30, estado: 'processing', order_type: 'delivery' }
+  }));
+  assert.equal(hub.getClientCount(), 1);
+  assert.match(healthy.response.output, /event: order_created/);
+  assert.match(healthy.response.output, /"restaurante_id":4/);
+
+  healthy.request.emit('close');
+  assert.equal(hub.getClientCount(), 0);
+});
+
+test('publisher best-effort tampoco propaga fallos de invalidación o logging', () => {
+  const publishAdminEvent = createBestEffortAdminPublisher({
+    analytics: { invalidate() { throw new Error('cache unavailable'); } },
+    events: { publish() { throw new Error('no debe alcanzarse'); } },
+    logger: { warn() { throw new Error('logger unavailable'); } }
+  });
+  assert.doesNotThrow(() => publishAdminEvent('order_created', { restaurante_id: 1 }));
+  assert.equal(publishAdminEvent('order_created', { restaurante_id: 1 }), null);
+  assert.match(indexSource, /const publishAdminEvent = createBestEffortAdminPublisher/);
 });
 
 test('fallo de analytics queda encapsulado en su servicio y rutas normales siguen presentes', async () => {

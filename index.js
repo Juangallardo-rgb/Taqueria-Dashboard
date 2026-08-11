@@ -49,7 +49,7 @@ const {
 } = require('./lib/order-utils');
 const { createRestaurantProductCache } = require('./lib/product-cache');
 const { createAdminAnalytics, AdminAnalyticsError } = require('./lib/admin-analytics');
-const { createAdminEventHub } = require('./lib/admin-events');
+const { createAdminEventHub, createBestEffortAdminPublisher } = require('./lib/admin-events');
 const {
   ProductMutationError,
   createProductCrudService
@@ -128,11 +128,10 @@ const productCache = createRestaurantProductCache();
 const productCrud = createProductCrudService({ pool, cache: productCache });
 const adminAnalytics = createAdminAnalytics({ pool });
 const adminEvents = createAdminEventHub();
-
-function publishAdminEvent(type, payload) {
-  adminAnalytics.invalidate();
-  return adminEvents.publish(type, payload);
-}
+const publishAdminEvent = createBestEffortAdminPublisher({
+  analytics: adminAnalytics,
+  events: adminEvents
+});
 
 function sendOperationalError(res, error) {
   return res.status(error.statusCode || 500).json({
