@@ -10,6 +10,10 @@ const productCrudSource = fs.readFileSync(
   'utf8'
 );
 const stripeSource = fs.readFileSync(path.join(root, 'routes', 'stripeConnect.js'), 'utf8');
+const orderIntegritySource = fs.readFileSync(
+  path.join(root, 'lib', 'order-integrity.js'),
+  'utf8'
+);
 const adminSource = fs.readFileSync(path.join(root, 'admin.html'), 'utf8');
 const preflight = fs.readFileSync(
   path.join(root, 'migrations', '002_multitenant_operations_preflight.sql'),
@@ -42,7 +46,7 @@ test('webhooks nuevos resuelven token, validan raw body y conservan legacy', () 
 });
 
 test('órdenes, deliveries y productos usan claves compuestas', () => {
-  assert.ok(count(indexSource, /ON CONFLICT \(restaurante_id, woo_order_id\)/g) >= 2);
+  assert.match(orderIntegritySource, /ON CONFLICT \(restaurante_id, woo_order_id\)/);
   assert.match(indexSource, /ON CONFLICT \(restaurante_id, order_number\)/);
   assert.match(productCrudSource, /ON CONFLICT \(restaurante_id, woo_product_id\)/);
   assert.doesNotMatch(indexSource, /ON CONFLICT \(woo_order_id\)/);
@@ -120,7 +124,8 @@ test('Stripe protege administración por sesión y conserva rutas financieras', 
   assert.match(stripeSource, /router\.get\("\/authorize\/:restauranteId", requireAdminRestaurantAccess/);
   assert.match(stripeSource, /router\.get\("\/status\/:restauranteId", requireAdminRestaurantAccess/);
   assert.match(stripeSource, /router\.post\("\/test-payment\/:restauranteId", requireAdminRestaurantAccess/);
-  assert.match(stripeSource, /ON CONFLICT \(restaurante_id, woo_order_id\)/);
+  assert.match(stripeSource, /orderIntegrity\.persistStripePayment/);
+  assert.doesNotMatch(stripeSource, /INSERT INTO pedidos/);
   assert.match(stripeSource, /router\.post\("\/create-payment-intent"/);
   assert.match(stripeSource, /router\.post\("\/refund"/);
 });

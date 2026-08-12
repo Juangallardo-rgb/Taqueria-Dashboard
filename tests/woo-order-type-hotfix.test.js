@@ -10,6 +10,10 @@ const {
 
 const root = path.resolve(__dirname, '..');
 const indexSource = fs.readFileSync(path.join(root, 'index.js'), 'utf8');
+const orderIntegritySource = fs.readFileSync(
+  path.join(root, 'lib', 'order-integrity.js'),
+  'utf8'
+);
 
 function explicitOrderType(value, overrides = {}) {
   return {
@@ -57,14 +61,15 @@ test('_denix_order_type=pickup se resuelve para guardar pickup', () => {
 
   assert.deepEqual(resolved, {
     tipoPedido: 'pickup',
-    tipoPedidoExplicito: true
+    tipoPedidoExplicito: true,
+    tipoPedidoConfiable: true
   });
   assert.match(
     sourceBetween(
       'async function processWooOrderWebhook',
       "app.post('/webhooks/woo/:webhookToken/order'"
     ),
-    /const \{ tipoPedido \} = resolverTipoPedidoWoo\(order\)/
+    /orderIntegrity\.upsertWooOrder\(restauranteId, order\)/
   );
 });
 
@@ -73,7 +78,8 @@ test('_denix_order_type=delivery se resuelve para guardar delivery', () => {
     resolverTipoPedidoWoo(explicitOrderType('delivery')),
     {
       tipoPedido: 'delivery',
-      tipoPedidoExplicito: true
+      tipoPedidoExplicito: true,
+      tipoPedidoConfiable: true
     }
   );
 });
@@ -174,7 +180,7 @@ test('restaurante 4 no modifica pedidos del restaurante 1', () => {
     "app.post('/webhooks/woo/:webhookToken/order'"
   );
   assert.match(
-    wooWebhookSource,
+    orderIntegritySource,
     /ON CONFLICT \(restaurante_id, woo_order_id\)/
   );
 });
@@ -185,10 +191,10 @@ test('callback posterior de Shipday no convierte pickup guardado a delivery', ()
     "app.post('/webhooks/shipday/:webhookToken'"
   );
 
-  assert.match(shipdaySource, /resolverTipoPedidoWoo\(order\)/);
+  assert.match(shipdaySource, /orderIntegrity\.upsertWooOrder\(restauranteId, order\)/);
   assert.match(
-    shipdaySource,
-    /WHEN \$13::boolean THEN EXCLUDED\.tipo_pedido[\s\S]*?WHEN pedidos\.tipo_pedido = 'pickup' THEN pedidos\.tipo_pedido/
+    orderIntegritySource,
+    /WHEN \$13::boolean[\s\S]*?EXCLUDED\.tipo_pedido IN \('pickup', 'delivery'\)[\s\S]*?ELSE pedidos\.tipo_pedido/
   );
   assert.doesNotMatch(
     shipdaySource,
@@ -218,9 +224,9 @@ test('el upsert no crea duplicados por restaurante_id + woo_order_id', () => {
   assert.equal(store.rows.size, 1);
   assert.equal(store.get(4, 100).tipo_pedido, 'pickup');
   assert.ok(
-    (indexSource.match(
+    (orderIntegritySource.match(
       /ON CONFLICT \(restaurante_id, woo_order_id\)/g
-    ) || []).length >= 2
+    ) || []).length >= 1
   );
   assert.doesNotMatch(indexSource, /ON CONFLICT \(woo_order_id\)/);
 });

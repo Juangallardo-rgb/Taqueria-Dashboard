@@ -4,6 +4,7 @@ const Stripe = require("stripe");
 
 const router = express.Router();
 const pool = require("../database");
+const orderIntegrity = require("../lib/default-order-integrity");
 
 const STRIPE_CLIENT_ID = process.env.STRIPE_CONNECT_CLIENT_ID;
 const STRIPE_REDIRECT_URI = process.env.STRIPE_CONNECT_REDIRECT_URI;
@@ -696,54 +697,27 @@ const paymentIntent = await stripe.paymentIntents.create(
   }
 );
 
-    await pool.query(
-      `
-      INSERT INTO pedidos (
-        restaurante_id,
-        total,
-        estado,
-        woo_order_id,
-        customer_name,
-        items,
-        stripe_payment_intent_id,
-        stripe_account_id,
-        denix_application_fee_cents,
-        payment_split_status,
-        created_at
-      )
-      VALUES (
-        $1,
-        $2,
-        $3,
-        $4,
-        $5,
-        '[]'::json,
-        $6,
-        $7,
-        $8,
-        $9,
-        NOW()
-      )
-      ON CONFLICT (restaurante_id, woo_order_id)
-      DO UPDATE SET
-        total = EXCLUDED.total,
-        stripe_payment_intent_id = EXCLUDED.stripe_payment_intent_id,
-        stripe_account_id = EXCLUDED.stripe_account_id,
-        denix_application_fee_cents = EXCLUDED.denix_application_fee_cents,
-        payment_split_status = EXCLUDED.payment_split_status
-      `,
-      [
+    try {
+      await orderIntegrity.persistStripePayment(
         restaurante.id,
-        cleanAmountCents / 100,
-        paymentIntent.status === "succeeded" ? "processing" : paymentIntent.status,
         cleanWooOrderId,
-        customerEmail ? String(customerEmail) : "Cliente",
-        paymentIntent.id,
-        restaurante.stripe_account_id,
-        applicationFeeAmount,
-        paymentIntent.status,
-      ]
-    );
+        {
+          stripePaymentIntentId: paymentIntent.id,
+          stripeAccountId: restaurante.stripe_account_id,
+          applicationFeeAmount,
+          paymentStatus: paymentIntent.status
+        }
+      );
+    } catch (persistenceError) {
+      // El cobro ya ocurrio. Un fallo secundario de persistencia no debe
+      // invitar al cliente a ejecutar el pago nuevamente.
+      console.error("ORDER_STRIPE_PERSISTENCE_FAILED", {
+        restauranteId: restaurante.id,
+        wooOrderId: cleanWooOrderId,
+        paymentIntentId: paymentIntent.id,
+        message: persistenceError.message
+      });
+    }
 
     return res.json({
       success: true,

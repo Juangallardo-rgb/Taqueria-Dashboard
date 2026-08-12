@@ -41,9 +41,16 @@ Las rutas legacy `/webhook-order`, `/webhook-product`, `/webhook-shipday`,
 `/acciones-woo-pendientes` y `/acciones-woo/:id/resultado` se conservan solo
 para el restaurante 1 y solo mientras la feature flag esté activa.
 
-Los estados `checkout-draft`, `auto-draft`, `draft`, `failed` y `cancelled` se
-ignoran. `pending` se conserva porque Woo/Stripe puede crear la orden antes de
-completar el pago; una actualización posterior hace upsert del mismo registro.
+El endpoint de órdenes acepta tanto `order.created` como `order.updated`; el
+topic no cambia la ruta ni el aislamiento por token. Operativamente, cada
+restaurante debe configurar ambos webhooks hacia su mismo endpoint DENIX de
+órdenes. Solo se persisten como órdenes visibles los estados `processing` y
+`completed`; los estados previos o fallidos continúan ignorándose.
+
+El sistema no depende exclusivamente de `order.updated`: después de un pago
+Stripe exitoso, si la fila todavía no existe, DENIX consulta la orden exacta en
+WooCommerce y la hidrata. Un fallo temporal de Woo no cambia la respuesta del
+pago y activa reintentos de hidratación sin insertar una orden vacía.
 
 ### Migraciones
 
@@ -66,7 +73,8 @@ unicidad global después de que dos restaurantes compartan IDs externos.
 2. Guardar sus credenciales Woo y Shipday propias; no usar variables globales.
 3. Crear los tokens en un gestor seguro y guardarlos con la edición protegida;
    el panel solo volverá a mostrarlos enmascarados.
-4. Configurar los dos webhooks Woo con su URL tokenizada y secreto HMAC.
+4. Configurar `order.created` y `order.updated` con la misma URL tokenizada de
+   órdenes y el mismo secreto HMAC.
 5. Configurar Shipday con su URL tokenizada y secreto por header o query.
 6. Configurar WordPress Bridge con las rutas tokenizadas.
 7. Probar pickup, delivery, producto, Bridge, push y refund en entorno controlado.

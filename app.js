@@ -285,6 +285,25 @@ async function mostrarInicio() {
 // =====================
 // PEDIDOS (TIEMPO REAL)
 // =====================
+function pedidoTieneItemsVacios(items) {
+  if (items === null || items === undefined) return true;
+  if (Array.isArray(items)) return items.length === 0;
+
+  if (typeof items === 'string') {
+    const value = items.trim();
+    if (!value) return true;
+
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) && parsed.length === 0;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  return false;
+}
+
 async function verPedidos(esAuto = false) {
   // Evita que dos refrescos de pedidos se crucen y dupliquen consultas.
   if (pedidosCargando) return;
@@ -324,9 +343,9 @@ data.forEach(p => {
 
   const idWoo = p.woo_order_id;
 
-  if (!idWoo || p.estado_envio !== 'pickup') return;
+  if (!idWoo) return;
 
-  const sinItems = !p.items || p.items === '[]';
+  const sinItems = pedidoTieneItemsVacios(p.items);
 
   if (sinItems) {
 

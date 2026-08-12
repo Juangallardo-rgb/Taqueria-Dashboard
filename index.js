@@ -41,12 +41,15 @@ const {
   verifyShipdaySecret
 } = require('./lib/webhook-security');
 const {
-  resolverTipoPedidoWoo,
   detectarTipoPedidoWoo,
-  buildWooOrderItems,
-  getWooDeliveryAddress,
   shouldAcceptWooOrder
 } = require('./lib/order-utils');
+const orderIntegrity = require('./lib/default-order-integrity');
+const {
+  cachePedidos,
+  CACHE_PEDIDOS_MS,
+  invalidarCachePedidos
+} = require('./lib/order-cache');
 const { createRestaurantProductCache } = require('./lib/product-cache');
 const { createAdminAnalytics, AdminAnalyticsError } = require('./lib/admin-analytics');
 const { createAdminEventHub, createBestEffortAdminPublisher } = require('./lib/admin-events');
@@ -580,72 +583,18 @@ async function processWooOrderWebhook(req, res, restauranteId) {
 
   try {
 
-    const items = buildWooOrderItems(order);
-    const { tipoPedido } = resolverTipoPedidoWoo(order);
-    const {
-      deliveryAddress,
-      deliveryCity,
-      deliveryPostcode
-    } = getWooDeliveryAddress(order);
-    // ======================================================
-    // ✅ GUARDAR ORDEN COMO YA FUNCIONA ACTUALMENTE
-    // No se toca items ni refund_items
-    // ======================================================
-    const wooOrderWrite = await pool.query(
-  `INSERT INTO pedidos 
-   (
-     restaurante_id,
-     total,
-     estado,
-     woo_order_id,
-     customer_name,
-     customer_phone,
-     items,
-     refund_items,
-     tipo_pedido,
-     delivery_address,
-     delivery_city,
-     delivery_postcode
-   )
-   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-   ON CONFLICT (restaurante_id, woo_order_id)
-   DO UPDATE SET
-     estado = EXCLUDED.estado,
-     total = EXCLUDED.total,
-     customer_name = EXCLUDED.customer_name,
-     customer_phone = EXCLUDED.customer_phone,
-     items = EXCLUDED.items,
-     refund_items = EXCLUDED.refund_items,
-     tipo_pedido = EXCLUDED.tipo_pedido,
-     delivery_address = EXCLUDED.delivery_address,
-     delivery_city = EXCLUDED.delivery_city,
-     delivery_postcode = EXCLUDED.delivery_postcode
-   RETURNING id, created_at, (xmax = 0) AS inserted`,
-  [
-    restauranteId,
-    order.total,
-    order.status,
-    order.id,
-    `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
-    order.billing?.phone || '',
-    JSON.stringify(items),
-    JSON.stringify(order.line_items || []),
-    tipoPedido,
-    deliveryAddress,
-    deliveryCity,
-    deliveryPostcode
-  ]
-);
-
-    const storedWooOrder = wooOrderWrite.rows[0];
+    const { storedOrder: storedWooOrder, normalizedOrder } =
+      await orderIntegrity.upsertWooOrder(restauranteId, order);
+    // El UPSERT central protege items, telefono y tipo frente a payloads
+    // parciales, y conserva la prioridad del tipo explicito de Woo.
     publishAdminEvent(storedWooOrder?.inserted ? 'order_created' : 'order_updated', {
       restaurante_id: restauranteId,
       order: {
-        woo_order_id: order.id,
-        total: order.total,
-        estado: order.status,
-        customer_name: `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
-        order_type: tipoPedido,
+        woo_order_id: normalizedOrder.wooOrderId,
+        total: normalizedOrder.total,
+        estado: normalizedOrder.estado,
+        customer_name: normalizedOrder.customerName,
+        order_type: normalizedOrder.tipoPedido,
         created_at: storedWooOrder?.created_at || new Date().toISOString()
       }
     });
@@ -863,80 +812,18 @@ async function processShipdayWebhook(req, res, restauranteId, config) {
             return;
           }
 
-          const items = buildWooOrderItems(order);
-          const {
-            deliveryAddress,
-            deliveryCity,
-            deliveryPostcode
-          } = getWooDeliveryAddress(order);
-          const {
-            tipoPedido,
-            tipoPedidoExplicito
-          } = resolverTipoPedidoWoo(order);
+          const { storedOrder: storedShipdayOrder, normalizedOrder } =
+            await orderIntegrity.upsertWooOrder(restauranteId, order);
 
-          // 🔥 3. INSERTAR / ACTUALIZAR PEDIDO DESDE WOO
-          const shipdayOrderWrite = await pool.query(
-            `INSERT INTO pedidos 
-            (
-              restaurante_id,
-              total,
-              estado,
-              woo_order_id,
-              customer_name,
-              customer_phone,
-              items,
-              refund_items,
-              tipo_pedido,
-              delivery_address,
-              delivery_city,
-              delivery_postcode,
-              created_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
-            ON CONFLICT (restaurante_id, woo_order_id)
-            DO UPDATE SET
-              estado = EXCLUDED.estado,
-              total = EXCLUDED.total,
-              customer_name = EXCLUDED.customer_name,
-              customer_phone = EXCLUDED.customer_phone,
-              items = EXCLUDED.items,
-              refund_items = EXCLUDED.refund_items,
-              tipo_pedido = CASE
-                WHEN $13::boolean THEN EXCLUDED.tipo_pedido
-                WHEN pedidos.tipo_pedido = 'pickup' THEN pedidos.tipo_pedido
-                ELSE EXCLUDED.tipo_pedido
-              END,
-              delivery_address = EXCLUDED.delivery_address,
-              delivery_city = EXCLUDED.delivery_city,
-              delivery_postcode = EXCLUDED.delivery_postcode
-            RETURNING id, created_at, (xmax = 0) AS inserted`,
-            [
-              restauranteId,
-              order.total,
-              order.status,
-              String(order.id),
-              `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
-              order.billing?.phone || '',
-              JSON.stringify(items),
-              JSON.stringify(order.line_items || []),
-              tipoPedido,
-              deliveryAddress,
-              deliveryCity,
-              deliveryPostcode,
-              tipoPedidoExplicito
-            ]
-          );
-
-          invalidarCachePedidos(restauranteId);
-          const storedShipdayOrder = shipdayOrderWrite.rows[0];
+          // 🔥 3. REUTILIZAR EL UPSERT WOO NO DESTRUCTIVO
           publishAdminEvent(storedShipdayOrder?.inserted ? 'order_created' : 'order_updated', {
             restaurante_id: restauranteId,
             order: {
-              woo_order_id: order.id,
-              total: order.total,
-              estado: order.status,
-              customer_name: `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim() || 'Cliente',
-              order_type: tipoPedido,
+              woo_order_id: normalizedOrder.wooOrderId,
+              total: normalizedOrder.total,
+              estado: normalizedOrder.estado,
+              customer_name: normalizedOrder.customerName,
+              order_type: normalizedOrder.tipoPedido,
               created_at: storedShipdayOrder?.created_at || new Date().toISOString()
             }
           });
@@ -1086,13 +973,6 @@ app.get('/shipday-live', requireSessionRestaurant, (req, res) => {
 // CACHE CORTO DE PEDIDOS
 // Protege Supabase aunque existan apps antiguas abiertas.
 // ======================================================
-const cachePedidos = new Map();
-const CACHE_PEDIDOS_MS = 5000;
-
-function invalidarCachePedidos(restauranteId) {
-  cachePedidos.delete(String(restauranteId));
-}
-
 // ===============================
 // 🧩 UNIÓN FINAL CON CACHE
 // ===============================
@@ -1482,65 +1362,19 @@ app.get('/force-order/:id', requireSessionRestaurant, requireWooOperationalConfi
 
   try {
 
-    // 🔥 1. TRAER PEDIDO ACTUAL
-    const existing = await pool.query(
-      `SELECT items
-       FROM pedidos
-       WHERE woo_order_id = $1
-         AND restaurante_id = $2`,
-      [orderId, restauranteId]
+    const hydration = await orderIntegrity.hydrateOrderFromWoo(
+      restauranteId,
+      orderId,
+      { config }
     );
-
-    if (existing.rows.length) {
-      const itemsActual = existing.rows[0].items;
-    }
-
-    // 🔥 2. TRAER DESDE WOO
-    const wooRes = await axios.get(
-      `${config.woo_url}/wp-json/wc/v3/orders?search=${orderId}`,
-      {
-        auth: getWooAxiosAuth(config)
-      }
-    );
-
-    const order = wooRes.data?.[0];
-
-    if (!order) {
-      return res.json({ skipped: true });
-    }
-
-    // 🔥 3. PROCESAR ITEMS
-    const items = buildWooOrderItems(order);
-
-    // 🔥 4. GUARDAR SOLO UNA VEZ
-    await pool.query(
-  `UPDATE pedidos 
-   SET 
-     customer_phone = $1,
-     items = $2,
-     refund_items = $3
-   WHERE woo_order_id = $4
-     AND restaurante_id = $5`,
-  [
-    // ✅ teléfono del cliente desde Woo
-    order.billing?.phone || '',
-
-    // ✅ visual actual
-    JSON.stringify(items),
-
-    // ✅ datos completos para refund parcial
-    JSON.stringify(order.line_items || []),
-
-    order.id,
-    restauranteId
-  ]
-);
-
-    invalidarCachePedidos(restauranteId);
 
 console.log("⚡ FORCE ORDER:", orderId);
 
-    res.json({ success: true });
+    res.json({
+      success: true,
+      woo_order_id: hydration.normalizedOrder.wooOrderId,
+      tipo_pedido: hydration.normalizedOrder.tipoPedido
+    });
 
   } catch (err) {
     console.error("❌ ERROR FORCE ORDER:", err.message);
