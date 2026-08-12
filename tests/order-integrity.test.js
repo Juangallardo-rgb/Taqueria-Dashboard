@@ -22,6 +22,11 @@ const integritySource = fs.readFileSync(
   'utf8'
 );
 const readmeSource = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
+const migrationSource = fs.readFileSync(
+  path.join(root, 'migrations', '005_order_hydration_jobs.sql'),
+  'utf8'
+);
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 class MemoryOrderRepository {
   constructor() {
@@ -30,6 +35,7 @@ class MemoryOrderRepository {
     this.nextId = 1;
     this.listCalls = 0;
     this.stateCalls = 0;
+    this.cleanupCalls = 0;
   }
 
   key(restauranteId, wooOrderId) {
@@ -56,7 +62,12 @@ class MemoryOrderRepository {
     return this.jobs.get(this.key(restauranteId, wooOrderId));
   }
 
-  seedJob(restauranteId, wooOrderId, stripeFields = stripePayment) {
+  seedJob(
+    restauranteId,
+    wooOrderId,
+    stripeFields = stripePayment,
+    values = {}
+  ) {
     const job = {
       restaurante_id: Number(restauranteId),
       woo_order_id: String(wooOrderId),
@@ -65,7 +76,11 @@ class MemoryOrderRepository {
       denix_application_fee_cents: stripeFields.applicationFeeAmount,
       payment_split_status: stripeFields.paymentStatus,
       status: 'pending',
-      attempts: 0
+      attempts: 0,
+      next_attempt_at: new Date(Date.now() - 1000),
+      completed_at: null,
+      last_error: null,
+      ...values
     };
     this.jobs.set(this.key(restauranteId, wooOrderId), job);
     return job;
@@ -164,6 +179,8 @@ class MemoryOrderRepository {
       paymentStatus: job.payment_split_status
     });
     job.status = 'completed';
+    job.completed_at = new Date();
+    job.last_error = null;
     return true;
   }
 
@@ -177,9 +194,17 @@ class MemoryOrderRepository {
 
   async listPendingHydrations(limit) {
     this.listCalls += 1;
+    const dueJobs = [...this.jobs.values()]
+      .filter(job => (
+        job.status === 'pending' &&
+        new Date(job.next_attempt_at).getTime() <= Date.now()
+      ))
+      .sort((left, right) => (
+        new Date(left.next_attempt_at) - new Date(right.next_attempt_at)
+      ))
+      .slice(0, limit);
     const pending = [];
-    for (const job of this.jobs.values()) {
-      if (job.status !== 'pending') continue;
+    for (const job of dueJobs) {
       const row = this.get(job.restaurante_id, job.woo_order_id);
       if (isOrderCommerciallyComplete(row)) {
         await this.reconcileCompleteOrder(job.restaurante_id, job.woo_order_id);
@@ -187,7 +212,23 @@ class MemoryOrderRepository {
         pending.push({ ...job });
       }
     }
-    return pending.slice(0, limit);
+    return pending;
+  }
+
+  async deleteExpiredCompletedHydrations() {
+    this.cleanupCalls += 1;
+    const cutoff = Date.now() - 30 * DAY_MS;
+    let deleted = 0;
+    for (const [key, job] of this.jobs) {
+      if (
+        job.status === 'completed' &&
+        new Date(job.completed_at).getTime() < cutoff
+      ) {
+        this.jobs.delete(key);
+        deleted += 1;
+      }
+    }
+    return deleted;
   }
 }
 
@@ -219,6 +260,7 @@ function createHarness({ repository = new MemoryOrderRepository() } = {}) {
   const errors = [];
   let wooCalls = 0;
   let wooHandler = null;
+  let now = Date.now();
 
   const service = createOrderIntegrityService({
     repository,
@@ -242,6 +284,7 @@ function createHarness({ repository = new MemoryOrderRepository() } = {}) {
     logger: { error: (...args) => errors.push(args) },
     retryDelaysMs: [5000, 30000, 120000, 300000],
     recoveryIntervalMs: 300000,
+    nowFn: () => now,
     setTimeoutFn: (callback, delay) => {
       const timer = { callback, delay, active: true, unref() {} };
       timers.push(timer);
@@ -265,6 +308,7 @@ function createHarness({ repository = new MemoryOrderRepository() } = {}) {
     errors,
     get wooCalls() { return wooCalls; },
     setWooHandler(handler) { wooHandler = handler; },
+    advanceTime(milliseconds) { now += milliseconds; },
     async runTimer(timer) {
       assert.equal(timer.active, true, 'el timer debe seguir activo');
       timer.active = false;
@@ -589,6 +633,99 @@ test('recovery en una consulta omite completas y agenda solo incompletas', async
   assert.equal(harness.service.activeChains.has('1:101'), true);
 });
 
+test('recovery limita a 50 jobs vencidos antes de reconciliar', async () => {
+  const harness = createHarness();
+  for (let orderId = 1; orderId <= 60; orderId += 1) {
+    harness.repository.seedJob(1, String(orderId));
+  }
+
+  const recovered = await harness.service.recoverPendingHydrations();
+
+  assert.equal(recovered, 50);
+  assert.equal(harness.repository.listCalls, 1);
+  assert.equal(harness.repository.stateCalls, 0);
+  assert.equal(harness.activeTimers().length, 50);
+});
+
+test('recovery no procesa jobs futuros ni completed recientes', async () => {
+  const harness = createHarness();
+  harness.repository.seedJob(1, 'future', stripePayment, {
+    next_attempt_at: new Date(Date.now() + DAY_MS)
+  });
+  harness.repository.seedJob(1, 'completed', stripePayment, {
+    status: 'completed',
+    completed_at: new Date(Date.now() - DAY_MS)
+  });
+
+  const recovered = await harness.service.recoverPendingHydrations();
+
+  assert.equal(recovered, 0);
+  assert.equal(harness.activeTimers().length, 0);
+  assert.ok(harness.repository.getJob(1, 'future'));
+  assert.ok(harness.repository.getJob(1, 'completed'));
+});
+
+test('cleanup elimina completed mayores a 30 dias y nunca pending', async () => {
+  const harness = createHarness();
+  harness.repository.seedJob(1, 'expired', stripePayment, {
+    status: 'completed',
+    completed_at: new Date(Date.now() - 31 * DAY_MS)
+  });
+  harness.repository.seedJob(1, 'recent', stripePayment, {
+    status: 'completed',
+    completed_at: new Date(Date.now() - 29 * DAY_MS)
+  });
+  harness.repository.seedJob(1, 'pending-old', stripePayment, {
+    status: 'pending',
+    completed_at: new Date(Date.now() - 60 * DAY_MS),
+    next_attempt_at: new Date(Date.now() + DAY_MS)
+  });
+
+  await harness.service.recoverPendingHydrations();
+
+  assert.equal(harness.repository.getJob(1, 'expired'), undefined);
+  assert.ok(harness.repository.getJob(1, 'recent'));
+  assert.ok(harness.repository.getJob(1, 'pending-old'));
+  assert.equal(harness.repository.cleanupCalls, 1);
+});
+
+test('cleanup corre al arrancar y luego como maximo una vez al dia', async () => {
+  const harness = createHarness();
+
+  await harness.service.recoverPendingHydrations();
+  await harness.service.recoverPendingHydrations();
+  assert.equal(harness.repository.cleanupCalls, 1);
+
+  harness.advanceTime(DAY_MS);
+  await harness.service.recoverPendingHydrations();
+  assert.equal(harness.repository.cleanupCalls, 2);
+  assert.equal(harness.repository.listCalls, 3);
+});
+
+test('SQL limita primero, no hace N+1 y conserva JOIN TEXT', () => {
+  const recoveryStart = integritySource.indexOf('WITH due_jobs AS MATERIALIZED');
+  const limitPosition = integritySource.indexOf('LIMIT $1', recoveryStart);
+  const joinPosition = integritySource.indexOf('JOIN pedidos p', recoveryStart);
+
+  assert.ok(recoveryStart >= 0);
+  assert.ok(limitPosition > recoveryStart);
+  assert.ok(joinPosition > limitPosition);
+  assert.match(
+    integritySource.slice(recoveryStart, joinPosition),
+    /WHERE j\.status = 'pending'[\s\S]*?j\.next_attempt_at <= NOW\(\)[\s\S]*?ORDER BY j\.next_attempt_at ASC[\s\S]*?LIMIT \$1/
+  );
+  assert.match(integritySource, /p\.woo_order_id = d\.woo_order_id/);
+  assert.match(migrationSource, /woo_order_id TEXT NOT NULL/);
+  assert.match(
+    migrationSource,
+    /idx_order_hydration_jobs_pending[\s\S]*?next_attempt_at[\s\S]*?WHERE status = 'pending'/
+  );
+  assert.match(
+    migrationSource,
+    /idx_order_hydration_jobs_completed[\s\S]*?completed_at[\s\S]*?WHERE status = 'completed'/
+  );
+});
+
 test('recovery loop usa intervalo de cinco minutos y no se duplica', async () => {
   const harness = createHarness();
   const first = harness.service.startRecoveryLoop();
@@ -599,6 +736,7 @@ test('recovery loop usa intervalo de cinco minutos y no se duplica', async () =>
   assert.equal(harness.intervals.length, 1);
   assert.equal(harness.intervals[0].delay, 300000);
   assert.equal(harness.repository.listCalls, 1);
+  assert.equal(harness.repository.cleanupCalls, 1);
 });
 
 test('force-order reutiliza criterio central de orden completa', () => {

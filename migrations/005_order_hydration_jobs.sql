@@ -24,4 +24,8 @@ CREATE INDEX IF NOT EXISTS idx_order_hydration_jobs_pending
   ON order_hydration_jobs (next_attempt_at)
   WHERE status = 'pending';
 
+CREATE INDEX IF NOT EXISTS idx_order_hydration_jobs_completed
+  ON order_hydration_jobs (completed_at)
+  WHERE status = 'completed';
+
 COMMIT;

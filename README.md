@@ -58,7 +58,9 @@ minutos y 5 minutos, deduplicados por restaurante y orden. La tabla
 `order_hydration_jobs` permite recuperar pendientes después de un restart: se
 ejecuta una consulta limitada al iniciar y cada 5 minutos. La migración 005 es
 un prerrequisito del despliegue de este flujo y debe aplicarse manualmente antes
-de activar el código.
+de activar el código. El mismo ciclo ejecuta una limpieza al arrancar y como
+máximo una vez cada 24 horas: elimina solamente jobs `completed` con más de 30
+días y nunca elimina jobs `pending`.
 
 La idempotencia de Stripe conserva la política existente, incluida la cuenta
 conectada y `application_fee_amount`. Persiste el riesgo preexistente de que,
