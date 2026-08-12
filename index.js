@@ -53,6 +53,7 @@ const {
 const { createRestaurantProductCache } = require('./lib/product-cache');
 const { createAdminAnalytics, AdminAnalyticsError } = require('./lib/admin-analytics');
 const { createAdminEventHub, createBestEffortAdminPublisher } = require('./lib/admin-events');
+const { createOrderNotifier } = require('./lib/order-notifications');
 const {
   ProductMutationError,
   createProductCrudService
@@ -134,6 +135,12 @@ const adminEvents = createAdminEventHub();
 const publishAdminEvent = createBestEffortAdminPublisher({
   analytics: adminAnalytics,
   events: adminEvents
+});
+const orderNotifier = createOrderNotifier({
+  pool,
+  invalidateOrderCache: invalidarCachePedidos,
+  publishAdminEvent,
+  sendNewOrderPush: enviarPushNuevoPedido
 });
 
 function sendOperationalError(res, error) {
@@ -555,6 +562,34 @@ async function enviarPushNuevoPedido(restauranteId, order) {
   };
 }
 
+async function publishAndNotifyStoredOrder(
+  restauranteId,
+  order,
+  storedOrder,
+  normalizedOrder
+) {
+  return orderNotifier.notifyStoredOrder(
+    restauranteId,
+    order,
+    storedOrder,
+    normalizedOrder
+  );
+}
+
+orderIntegrity.setOrderHydratedHandler(async ({
+  restauranteId,
+  order,
+  storedOrder,
+  normalizedOrder
+}) => {
+  await publishAndNotifyStoredOrder(
+    restauranteId,
+    order,
+    storedOrder,
+    normalizedOrder
+  );
+});
+
 // ===============================
 // 🔥 WEBHOOK WOO (CORREGIDO)
 // ===============================
@@ -587,17 +622,10 @@ async function processWooOrderWebhook(req, res, restauranteId) {
       await orderIntegrity.upsertWooOrder(restauranteId, order);
     // El UPSERT central protege items, telefono y tipo frente a payloads
     // parciales, y conserva la prioridad del tipo explicito de Woo.
-    publishAdminEvent(storedWooOrder?.inserted ? 'order_created' : 'order_updated', {
-      restaurante_id: restauranteId,
-      order: {
-        woo_order_id: normalizedOrder.wooOrderId,
-        total: normalizedOrder.total,
-        estado: normalizedOrder.estado,
-        customer_name: normalizedOrder.customerName,
-        order_type: normalizedOrder.tipoPedido,
-        created_at: storedWooOrder?.created_at || new Date().toISOString()
-      }
-    });
+    await orderIntegrity.markOrderHydratedByExternalFlow(
+      restauranteId,
+      normalizedOrder.wooOrderId
+    );
 
     console.log("✅ WOO GUARDADO CON ITEMS:", order.id);
 
@@ -605,74 +633,12 @@ async function processWooOrderWebhook(req, res, restauranteId) {
     // 🔔 RESERVAR NOTIFICACIÓN SOLO UNA VEZ POR ORDEN
     // Si la orden ya notificó, este UPDATE no devuelve filas.
     // ======================================================
-    const pushClaim = await pool.query(
-      `UPDATE pedidos
-       SET push_notified = TRUE,
-           push_notified_at = NOW(),
-           push_notification_error = NULL
-       WHERE woo_order_id = $1
-       AND restaurante_id = $2
-       AND COALESCE(push_notified, FALSE) = FALSE
-       RETURNING id`,
-      [
-        String(order.id),
-        restauranteId
-      ]
+    await publishAndNotifyStoredOrder(
+      restauranteId,
+      order,
+      storedWooOrder,
+      normalizedOrder
     );
-
-    if (!pushClaim.rows.length) {
-      console.log("🔕 PUSH OMITIDO: orden ya notificada:", order.id);
-      return res.sendStatus(200);
-    }
-
-    // ======================================================
-    // 🔔 ENVIAR NOTIFICACIÓN PUSH
-    // Si falla, la orden sigue guardada correctamente.
-    // ======================================================
-    try {
-
-      const resultadoPush = await enviarPushNuevoPedido(restauranteId, order);
-
-      console.log("✅ PUSH NUEVO PEDIDO:", {
-        order_id: order.id,
-        enviados: resultadoPush.enviados,
-        desactivados: resultadoPush.desactivados,
-        sinDispositivos: resultadoPush.sinDispositivos
-      });
-
-      if (resultadoPush.sinDispositivos) {
-        await pool.query(
-          `UPDATE pedidos
-           SET push_notification_error = $1
-           WHERE woo_order_id = $2
-           AND restaurante_id = $3`,
-          [
-            'No había dispositivos activos suscritos',
-            String(order.id),
-            restauranteId
-          ]
-        );
-      }
-
-    } catch (pushError) {
-
-      console.error("❌ ERROR PUSH NUEVO PEDIDO:", pushError.message);
-
-      // Dejamos la orden disponible para reintento si Woo vuelve a enviar actualización.
-      await pool.query(
-        `UPDATE pedidos
-         SET push_notified = FALSE,
-             push_notified_at = NULL,
-             push_notification_error = $1
-         WHERE woo_order_id = $2
-         AND restaurante_id = $3`,
-        [
-          pushError.message,
-          String(order.id),
-          restauranteId
-        ]
-      );
-    }
 
     res.sendStatus(200);
 
@@ -1361,11 +1327,34 @@ app.get('/force-order/:id', requireSessionRestaurant, requireWooOperationalConfi
   const config = req.operationalConfig;
 
   try {
+    const needsHydration = await orderIntegrity.orderNeedsHydration(
+      restauranteId,
+      orderId
+    );
+
+    if (!needsHydration) {
+      return res.json({
+        success: true,
+        woo_order_id: String(orderId),
+        already_complete: true
+      });
+    }
 
     const hydration = await orderIntegrity.hydrateOrderFromWoo(
       restauranteId,
       orderId,
       { config }
+    );
+
+    await orderIntegrity.markOrderHydratedByExternalFlow(
+      restauranteId,
+      hydration.normalizedOrder.wooOrderId
+    );
+    await publishAndNotifyStoredOrder(
+      restauranteId,
+      hydration.order,
+      hydration.storedOrder,
+      hydration.normalizedOrder
     );
 
 console.log("⚡ FORCE ORDER:", orderId);
@@ -2473,6 +2462,7 @@ app.post('/push-test', requireSessionRestaurant, async (req, res) => {
 // 🚀 START
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);
+  orderIntegrity.startRecoveryLoop();
 });
 
 app.get('/test-db', async (req, res) => {

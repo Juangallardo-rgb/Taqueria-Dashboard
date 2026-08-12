@@ -5,6 +5,9 @@ const Stripe = require("stripe");
 const router = express.Router();
 const pool = require("../database");
 const orderIntegrity = require("../lib/default-order-integrity");
+const {
+  scheduleHydrationAfterResponse
+} = require("../lib/order-integrity");
 
 const STRIPE_CLIENT_ID = process.env.STRIPE_CONNECT_CLIENT_ID;
 const STRIPE_REDIRECT_URI = process.env.STRIPE_CONNECT_REDIRECT_URI;
@@ -697,8 +700,10 @@ const paymentIntent = await stripe.paymentIntents.create(
   }
 );
 
+    let hydrationQueued = false;
+
     try {
-      await orderIntegrity.persistStripePayment(
+      const persistence = await orderIntegrity.persistStripePayment(
         restaurante.id,
         cleanWooOrderId,
         {
@@ -708,6 +713,7 @@ const paymentIntent = await stripe.paymentIntents.create(
           paymentStatus: paymentIntent.status
         }
       );
+      hydrationQueued = persistence.hydration_queued === true;
     } catch (persistenceError) {
       // El cobro ya ocurrio. Un fallo secundario de persistencia no debe
       // invitar al cliente a ejecutar el pago nuevamente.
@@ -717,6 +723,15 @@ const paymentIntent = await stripe.paymentIntents.create(
         paymentIntentId: paymentIntent.id,
         message: persistenceError.message
       });
+    }
+
+    if (hydrationQueued) {
+      scheduleHydrationAfterResponse(
+        res,
+        orderIntegrity,
+        restaurante.id,
+        cleanWooOrderId
+      );
     }
 
     return res.json({

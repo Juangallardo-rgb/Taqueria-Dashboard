@@ -48,9 +48,23 @@ restaurante debe configurar ambos webhooks hacia su mismo endpoint DENIX de
 `completed`; los estados previos o fallidos continúan ignorándose.
 
 El sistema no depende exclusivamente de `order.updated`: después de un pago
-Stripe exitoso, si la fila todavía no existe, DENIX consulta la orden exacta en
-WooCommerce y la hidrata. Un fallo temporal de Woo no cambia la respuesta del
-pago y activa reintentos de hidratación sin insertar una orden vacía.
+Stripe exitoso, DENIX persiste localmente el job de hidratación, responde al
+checkout y solo al terminar la respuesta HTTP consulta la orden exacta en
+WooCommerce. Un fallo temporal de Woo no cambia la respuesta del pago y activa
+reintentos de hidratación sin insertar una orden vacía en `pedidos`.
+
+Los reintentos en memoria usan aproximadamente 5 segundos, 30 segundos, 2
+minutos y 5 minutos, deduplicados por restaurante y orden. La tabla
+`order_hydration_jobs` permite recuperar pendientes después de un restart: se
+ejecuta una consulta limitada al iniciar y cada 5 minutos. La migración 005 es
+un prerrequisito del despliegue de este flujo y debe aplicarse manualmente antes
+de activar el código.
+
+La idempotencia de Stripe conserva la política existente, incluida la cuenta
+conectada y `application_fee_amount`. Persiste el riesgo preexistente de que,
+tras perder la conexión, el frontend genere otro `paymentMethodId`: como ese ID
+forma parte de la clave idempotente, Stripe puede interpretarlo como un intento
+distinto. Este hotfix no rediseña esa política.
 
 ### Migraciones
 
@@ -62,7 +76,9 @@ Orden de revisión y ejecución manual:
 4. `003_multitenant_operations_additive.sql`.
 5. Desplegar y validar el backend nuevo únicamente con restaurante 1.
 6. Ejecutar `004_multitenant_operations_cutover.sql` cuando el preflight esté limpio.
-7. Configurar y activar restaurante 2 en una etapa posterior.
+7. Ejecutar `005_order_hydration_jobs.sql` antes de desplegar la hidratación
+   asíncrona de pagos. Esta migración no crea filas comerciales en `pedidos`.
+8. Configurar y activar restaurante 2 en una etapa posterior.
 
 Los rollbacks son conservadores: no eliminan datos ni intentan restaurar
 unicidad global después de que dos restaurantes compartan IDs externos.

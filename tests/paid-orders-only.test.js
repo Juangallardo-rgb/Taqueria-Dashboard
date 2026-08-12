@@ -28,7 +28,7 @@ test('webhook Woo valida el estado antes de caché, persistencia y push', () => 
   assert.ok(gateIndex >= 0);
   assert.ok(gateIndex < webhookSource.indexOf('invalidarCachePedidos(restauranteId)'));
   assert.ok(gateIndex < webhookSource.indexOf('orderIntegrity.upsertWooOrder'));
-  assert.ok(gateIndex < webhookSource.indexOf('enviarPushNuevoPedido'));
+  assert.ok(gateIndex < webhookSource.indexOf('publishAndNotifyStoredOrder'));
   assert.match(webhookSource, /ignored:\s*true/);
 });
 
