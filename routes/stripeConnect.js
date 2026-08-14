@@ -66,6 +66,17 @@ function toPositiveInteger(value) {
   return numberValue;
 }
 
+function requireAdminAccess(req, res, next) {
+  if (!req.session?.user_id || req.session?.rol !== "admin") {
+    return res.status(403).json({
+      success: false,
+      error: "Se requiere una sesión administrativa",
+    });
+  }
+
+  return next();
+}
+
 function requireAdminRestaurantAccess(req, res, next) {
   const sessionRestaurantId = toPositiveInteger(req.session?.restaurante_id);
   const pathRestaurantId = toPositiveInteger(req.params.restauranteId);
@@ -126,7 +137,7 @@ async function getStripeAccountStatus(stripeAccountId) {
  *
  * GET /api/stripe/connect/authorize/1
  */
-router.get("/authorize/:restauranteId", requireAdminRestaurantAccess, async (req, res) => {
+router.get("/authorize/:restauranteId", requireAdminAccess, async (req, res) => {
   try {
     const restauranteId = toPositiveInteger(req.params.restauranteId);
 
@@ -280,6 +291,29 @@ router.get("/callback", async (req, res) => {
     const stripeAccountId = tokenData.stripe_user_id;
     const isLiveMode = isStripeLiveMode();
 
+    await client.query(
+      "SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))",
+      ["stripe-connect-account", stripeAccountId]
+    );
+
+    const accountOwnerResult = await client.query(
+      `
+      SELECT id
+      FROM restaurantes
+      WHERE stripe_account_id = $1
+        AND id <> $2
+      FOR UPDATE
+      `,
+      [stripeAccountId, oauthState.restaurante_id]
+    );
+
+    if (accountOwnerResult.rowCount > 0) {
+      await client.query("ROLLBACK");
+      return res.status(409).send(
+        "La cuenta Stripe ya está asociada a otro restaurante."
+      );
+    }
+
     let connectStatus = "connected";
 
     try {
@@ -289,7 +323,7 @@ router.get("/callback", async (req, res) => {
       console.error("No se pudo verificar cuenta conectada:", accountError);
     }
 
-    await client.query(
+    const restaurantUpdateResult = await client.query(
       `
       UPDATE restaurantes
       SET
@@ -306,6 +340,12 @@ router.get("/callback", async (req, res) => {
         oauthState.restaurante_id,
       ]
     );
+
+    if (restaurantUpdateResult.rowCount !== 1) {
+      throw new Error(
+        "La actualización de Stripe Connect no afectó exactamente un restaurante."
+      );
+    }
 
     await client.query(
       `

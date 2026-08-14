@@ -118,12 +118,16 @@ test('admin edita configuración, genera secretos y nunca devuelve secretos comp
 });
 
 test('Stripe protege administración por sesión y conserva rutas financieras', () => {
+  assert.match(stripeSource, /function requireAdminAccess/);
   assert.match(stripeSource, /function requireAdminRestaurantAccess/);
   assert.match(stripeSource, /req\.session\?\.rol !== "admin"/);
   assert.match(stripeSource, /sessionRestaurantId !== pathRestaurantId/);
-  assert.match(stripeSource, /router\.get\("\/authorize\/:restauranteId", requireAdminRestaurantAccess/);
+  assert.match(stripeSource, /router\.get\("\/authorize\/:restauranteId", requireAdminAccess/);
   assert.match(stripeSource, /router\.get\("\/status\/:restauranteId", requireAdminRestaurantAccess/);
   assert.match(stripeSource, /router\.post\("\/test-payment\/:restauranteId", requireAdminRestaurantAccess/);
+  assert.match(stripeSource, /pg_advisory_xact_lock/);
+  assert.match(stripeSource, /WHERE stripe_account_id = \$1[\s\S]*?AND id <> \$2/);
+  assert.match(stripeSource, /restaurantUpdateResult\.rowCount !== 1/);
   assert.match(stripeSource, /orderIntegrity\.persistStripePayment/);
   assert.doesNotMatch(stripeSource, /INSERT INTO pedidos/);
   assert.match(stripeSource, /router\.post\("\/create-payment-intent"/);
