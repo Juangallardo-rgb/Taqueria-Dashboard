@@ -6,7 +6,11 @@ const {
   getLegacyRestaurantOneConfig,
   createRestaurantContext
 } = require('../lib/restaurant-context');
-const { getSessionSettings, SESSION_MAX_AGE_MS } = require('../lib/session');
+const {
+  getSessionSettings,
+  SESSION_MAX_AGE_MS,
+  ADMIN_SESSION_MAX_AGE_MS
+} = require('../lib/session');
 const { maskSecret } = require('../lib/mask-secret');
 const { PUBLIC_ASSETS } = require('../lib/public-assets');
 
@@ -196,6 +200,8 @@ test('configuración de sesión exige secreto y endurece la cookie', () => {
   assert.equal(development.cookie.sameSite, 'lax');
   assert.equal(development.cookie.secure, false);
   assert.equal(development.cookie.maxAge, SESSION_MAX_AGE_MS);
+  assert.equal(ADMIN_SESSION_MAX_AGE_MS, 12 * 60 * 60 * 1000);
+  assert.equal(development.cookie.priority, 'high');
 
   const production = getSessionSettings({
     SESSION_SECRET: 'test-secret-from-env',

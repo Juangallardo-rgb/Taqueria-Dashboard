@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node index.js",
     "test": "node --test tests/*.test.js",
-    "smoke:phase1": "node scripts/phase1-smoke.js"
+    "smoke:phase1": "node scripts/phase1-smoke.js",
+    "migrate:passwords": "node scripts/migrate-passwords.js"
   },
   "keywords": [],
   "author": "",

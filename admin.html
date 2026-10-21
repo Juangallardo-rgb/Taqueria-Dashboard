@@ -4,7 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#171716">
+  <meta name="description" content="Administración segura de restaurantes y operaciones Denix">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Denix Admin">
   <title>Administración · Denix</title>
+  <link rel="manifest" href="/admin/manifest.webmanifest">
+  <link rel="icon" href="/admin/icon-192.png">
+  <link rel="apple-touch-icon" href="/admin/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
@@ -64,6 +71,9 @@
         <div class="topbar-actions">
           <span class="topbar-date" id="topbarDate">—</span>
           <span class="live-indicator connecting" id="liveIndicator"><i></i><span>CONNECTING</span></span>
+          <button class="button compact install-admin-button" type="button" data-install-admin hidden>
+            <span data-icon="download" aria-hidden="true"></span> Instalar app
+          </button>
           <button class="icon-button topbar-refresh" id="refreshButton" data-refresh-dashboard type="button" aria-label="Refrescar dashboard" title="Refrescar">
             <span data-icon="refresh" aria-hidden="true"></span>
           </button>
@@ -79,7 +89,7 @@
           <span data-icon="menu" aria-hidden="true"></span>
         </button>
         <div class="mobile-brand"><span>D</span> Denix <i class="mobile-live" id="mobileLiveIndicator" title="Conectando actualizaciones"></i></div>
-        <div class="mobile-actions"><button class="icon-button" data-refresh-dashboard type="button" aria-label="Refrescar dashboard"><span data-icon="refresh"></span></button><div class="profile-avatar small" id="mobileAvatar">A</div></div>
+        <div class="mobile-actions"><button class="icon-button" type="button" data-install-admin hidden aria-label="Instalar aplicación"><span data-icon="download"></span></button><button class="icon-button" data-refresh-dashboard type="button" aria-label="Refrescar dashboard"><span data-icon="refresh"></span></button><div class="profile-avatar small" id="mobileAvatar">A</div></div>
       </header>
 
       <main class="main-content" id="mainContent" tabindex="-1"></main>
@@ -90,13 +100,7 @@
   <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
   <div class="modal-root" id="modalRoot"></div>
 
+  <script src="/admin/pwa.js"></script>
   <script src="/admin/assets/admin.js"></script>
-  <script>
-    // Compatibilidad con las acciones globales del panel anterior.
-    window.editarRestaurante = id => window.DenixAdmin.editarRestaurante(id);
-    window.generarSecretos = id => window.DenixAdmin.generarSecretos(id);
-    window.crearRestaurante = event => window.DenixAdmin.crearRestaurante(event);
-    window.crearUsuario = event => window.DenixAdmin.crearUsuario(event);
-  </script>
 </body>
 </html>

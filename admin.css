@@ -293,6 +293,11 @@ select:focus-visible {
   gap: 14px;
 }
 
+.install-admin-button [data-icon] {
+  width: 15px;
+  height: 15px;
+}
+
 .topbar-date {
   color: var(--muted);
   font-size: 11px;

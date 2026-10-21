@@ -78,6 +78,10 @@ async function login() {
     localStorage.setItem('login', 'true');
 
     setTimeout(() => {
+      if (data.redirect) {
+        window.location.replace(data.redirect);
+        return;
+      }
       location.reload();
     }, 550);
 

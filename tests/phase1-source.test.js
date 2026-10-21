@@ -34,11 +34,16 @@ test('la migración de Fase 1 sigue siendo aditiva y el rollback no destructivo'
 });
 
 test('login y contexto público conservan la sesión persistente de Fase 1', () => {
-  const login = between(indexSource, "app.post('/login'", "app.get('/admin'");
+  const login = between(
+    indexSource,
+    'async function authenticateCredentials',
+    '// LOGIN GENERAL'
+  );
 
   assert.match(login, /await regenerateSession\(req\)/);
   assert.match(login, /req\.session\.restaurante_id = restauranteId/);
   assert.doesNotMatch(login, /restaurante_id \|\| 1/);
+  assert.match(indexSource, /app\.post\('\/login', requireSameOrigin/);
   assert.match(indexSource, /app\.get\('\/session', requireSessionRestaurant/);
   assert.match(indexSource, /app\.get\('\/mi-restaurante', requireSessionRestaurant/);
   assert.match(indexSource, /await destroySession\(req\)/);

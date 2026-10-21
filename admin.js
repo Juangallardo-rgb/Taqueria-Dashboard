@@ -6,6 +6,7 @@
     restaurants: [],
     users: [],
     snapshot: null,
+    csrfToken: '',
     range: { key: 'today', start: '', end: '' },
     analyticsRestaurantId: null,
     restaurantSort: { field: 'net_sales', direction: 'desc' },
@@ -32,7 +33,8 @@
     key: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M18 5l2 2M15 8l2 2"/></svg>',
     store: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10h16M5 10v10h14V10M3 10l2-6h14l2 6"/></svg>',
     userPlus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>',
-    refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18.5 9A7 7 0 0 0 6 6.5L4 9M5.5 15A7 7 0 0 0 18 17.5l2-2.5"/></svg>'
+    refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18.5 9A7 7 0 0 0 6 6.5L4 9M5.5 15A7 7 0 0 0 18 17.5l2-2.5"/></svg>',
+    download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>'
   };
 
   const selectors = {
@@ -96,11 +98,15 @@
   }
 
   async function fetchJson(url, options = {}) {
+    const method = String(options.method || 'GET').toUpperCase();
     const response = await fetch(url, {
       cache: 'no-store',
       ...options,
       headers: {
         ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(!['GET', 'HEAD', 'OPTIONS'].includes(method) && state.csrfToken
+          ? { 'X-CSRF-Token': state.csrfToken }
+          : {}),
         ...(options.headers || {})
       }
     });
@@ -1085,6 +1091,7 @@
         throw new Error('Se requiere una sesión administrativa.');
       }
       state.session = session;
+      state.csrfToken = session.csrf_token || '';
       const email = session.user?.email || 'Administrador';
       const avatar = initials(email);
       document.getElementById('topbarDate').textContent = new Intl.DateTimeFormat('es-EC', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date());
@@ -1111,6 +1118,12 @@
     generarSecretos,
     crearUsuario
   };
+
+  // Compatibilidad con las acciones globales del panel anterior.
+  window.editarRestaurante = id => window.DenixAdmin.editarRestaurante(id);
+  window.generarSecretos = id => window.DenixAdmin.generarSecretos(id);
+  window.crearRestaurante = event => window.DenixAdmin.crearRestaurante(event);
+  window.crearUsuario = event => window.DenixAdmin.crearUsuario(event);
 
   iniciarAdmin();
 })();

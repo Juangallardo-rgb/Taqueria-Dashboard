@@ -92,7 +92,7 @@ test('ruta pública no exige sesión y toggle continúa privado', () => {
 
   assert.match(
     indexSource,
-    /app\.get\(\s*'\/public\/restaurants\/:webhookToken\/status',\s*publicRestaurantStatusHandler\s*\)/
+    /app\.get\(\s*'\/public\/restaurants\/:webhookToken\/status',\s*publicCors,\s*publicRestaurantStatusHandler\s*\)/
   );
   assert.match(
     indexSource,

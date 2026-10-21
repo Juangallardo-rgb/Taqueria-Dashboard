@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#171716">
+  <meta name="description" content="Acceso seguro al panel administrativo de Denix">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Denix Admin">
+  <title>Acceso administrativo · Denix</title>
+  <link rel="manifest" href="/admin/manifest.webmanifest">
+  <link rel="icon" href="/admin/icon-192.png">
+  <link rel="apple-touch-icon" href="/admin/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/admin/login/assets/login.css">
+  <script src="/admin/pwa.js" defer></script>
+  <script src="/admin/login/assets/login.js" defer></script>
+</head>
+<body>
+  <main class="login-shell">
+    <section class="login-hero" aria-label="Denix Admin">
+      <div class="hero-glow hero-glow-one"></div>
+      <div class="hero-glow hero-glow-two"></div>
+      <div class="hero-content">
+        <div class="brand-lockup">
+          <span class="brand-mark" aria-hidden="true">D</span>
+          <div><strong>Denix</strong><span>Admin console</span></div>
+        </div>
+        <div class="hero-copy">
+          <span class="eyebrow">CONTROL CENTRAL</span>
+          <h1>Tu operación,<br>siempre contigo.</h1>
+          <p>Supervisa restaurantes, usuarios y ventas desde un espacio administrativo privado.</p>
+        </div>
+        <div class="security-note"><span aria-hidden="true">●</span> Sesión cifrada y acceso exclusivo para administradores</div>
+      </div>
+    </section>
+
+    <section class="login-panel">
+      <div class="login-card">
+        <div class="mobile-brand">
+          <span class="brand-mark" aria-hidden="true">D</span>
+          <div><strong>Denix</strong><span>Admin console</span></div>
+        </div>
+
+        <header>
+          <span class="eyebrow dark">ACCESO SEGURO</span>
+          <h2>Bienvenido</h2>
+          <p>Ingresa con una cuenta que tenga permisos administrativos.</p>
+        </header>
+
+        <form id="adminLoginForm" novalidate>
+          <label for="adminEmail">Correo o usuario</label>
+          <div class="input-wrap">
+            <span aria-hidden="true">@</span>
+            <input id="adminEmail" name="email" type="text" autocomplete="username" placeholder="admin@denixorders.com" required maxlength="254">
+          </div>
+
+          <label for="adminPassword">Contraseña</label>
+          <div class="input-wrap">
+            <span aria-hidden="true">◆</span>
+            <input id="adminPassword" name="password" type="password" autocomplete="current-password" placeholder="Tu contraseña" required minlength="8">
+            <button class="password-toggle" id="passwordToggle" type="button" aria-label="Mostrar contraseña">Ver</button>
+          </div>
+
+          <div class="form-message" id="loginMessage" role="alert" aria-live="polite"></div>
+
+          <button class="primary-action" id="loginButton" type="submit">
+            <span>Entrar al administrador</span>
+            <i aria-hidden="true"></i>
+          </button>
+        </form>
+
+        <button class="install-action" type="button" data-install-admin hidden>
+          Instalar Denix Admin en este dispositivo
+        </button>
+
+        <a class="restaurant-link" href="/">Ir al panel del restaurante</a>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

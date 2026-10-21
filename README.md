@@ -80,7 +80,10 @@ Orden de revisión y ejecución manual:
 6. Ejecutar `004_multitenant_operations_cutover.sql` cuando el preflight esté limpio.
 7. Ejecutar `005_order_hydration_jobs.sql` antes de desplegar la hidratación
    asíncrona de pagos. Esta migración no crea filas comerciales en `pedidos`.
-8. Configurar y activar restaurante 2 en una etapa posterior.
+8. Ejecutar `006_password_security.sql` antes del backend con autenticación
+   reforzada y luego `npm run migrate:passwords` una sola vez. El comando es
+   idempotente: omite credenciales que ya tengan hash scrypt versionado.
+9. Configurar y activar restaurante 2 en una etapa posterior.
 
 Los rollbacks son conservadores: no eliminan datos ni intentan restaurar
 unicidad global después de que dos restaurantes compartan IDs externos.
@@ -142,3 +145,35 @@ node --check routes\stripeConnect.js
 ```
 
 Las pruebas no llaman WooCommerce, Shipday, Stripe, Supabase ni push reales.
+
+## Acceso y PWA administrativa
+
+El administrador se inicia en `/admin/login`. Las rutas visuales anónimas bajo
+`/admin` redirigen a ese acceso; API y SSE continúan respondiendo `401`/`403`
+sin convertir errores de autenticación en HTML. Solo una cuenta con rol
+`admin` puede completar el inicio de sesión.
+
+Las contraseñas nuevas se guardan con scrypt, salt aleatorio y formato
+versionado. El login puede validar temporalmente una credencial heredada y la
+actualiza inmediatamente después de un acceso correcto. Para no depender de
+que cada usuario vuelva a entrar, el despliegue debe ejecutar la migración total
+indicada arriba. La sesión administrativa dura 12 horas activas, regenera su ID
+al autenticar y usa un token CSRF para mutaciones del panel.
+
+La PWA administrativa es independiente de la PWA operativa:
+
+- manifest: `/admin/manifest.webmanifest`;
+- inicio y alcance: `/admin/`;
+- service worker: `/admin/sw.js`;
+- instalación: desde el botón **Instalar app** o desde el menú de Chrome.
+
+El service worker solo precarga el login, la pantalla sin conexión, iconos y
+archivos públicos de instalación. Nunca escribe en caché endpoints, analítica,
+usuarios, restaurantes ni el shell autenticado.
+
+Variables recomendadas para producción:
+
+- `SESSION_SECRET`: obligatoria, larga y almacenada como secreto del servicio;
+- `PUBLIC_APP_ORIGIN=https://dashboard.denixorders.com`: fija el origen válido
+  para las mutaciones aunque cambien headers del proxy;
+- `NODE_ENV=production`: activa cookie `Secure` y HSTS.

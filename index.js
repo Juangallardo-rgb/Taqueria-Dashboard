@@ -20,12 +20,25 @@ const webpush = require('web-push');
 const stripeConnectRoutes = require('./routes/stripeConnect');
 const {
   SESSION_COOKIE_NAME,
+  ADMIN_SESSION_MAX_AGE_MS,
   getSessionSettings,
   createPersistentSessionMiddleware,
   regenerateSession,
   saveSession,
   destroySession
 } = require('./lib/session');
+const {
+  hashPassword,
+  verifyPassword,
+  isPasswordHash
+} = require('./lib/password-security');
+const {
+  applySecurityHeaders,
+  createLoginAttemptLimiter,
+  redirectAdminShellToLogin,
+  requireAdminCsrf,
+  requireSameOrigin
+} = require('./lib/http-security');
 const { createRestaurantContext } = require('./lib/restaurant-context');
 const { maskSecret } = require('./lib/mask-secret');
 const { registerPublicAssetRoutes } = require('./lib/public-assets');
@@ -62,7 +75,8 @@ const {
 
 const app = express();
 app.set('trust proxy', 1);
-app.use(cors());
+app.disable('x-powered-by');
+app.use(applySecurityHeaders);
 app.use(express.json({
   verify: (req, res, buffer) => {
     req.rawBody = Buffer.from(buffer);
@@ -71,6 +85,8 @@ app.use(express.json({
 app.use(express.urlencoded({ extended: true }));
 
 const PORT = process.env.PORT || 4000;
+const publicCors = cors({ origin: '*', methods: ['GET', 'HEAD', 'OPTIONS'] });
+const loginAttemptLimiter = createLoginAttemptLimiter();
 const LEGACY_RESTAURANT_ONE_ENABLED =
   String(process.env.ENABLE_LEGACY_RESTAURANT_1 || '').toLowerCase() === 'true';
 
@@ -173,20 +189,55 @@ function getWooAxiosAuth(config) {
 // Stripe conserva su comportamiento actual durante esta fase.
 app.use('/api/stripe/connect', stripeConnectRoutes);
 
-// Toda ruta /admin, incluida la página HTML, exige una sesión administrativa.
-app.use('/admin', requireAdmin);
-
 // Solo estos recursos frontend son públicos.
 registerPublicAssetRoutes(app, __dirname);
 
+function safeAdminNext(value) {
+  const nextPath = String(value || '/admin');
+  if (
+    !(nextPath === '/admin' || nextPath.startsWith('/admin/')) ||
+    nextPath.startsWith('//') ||
+    nextPath.startsWith('/admin/login')
+  ) {
+    return '/admin';
+  }
+  return nextPath;
+}
+
+app.get('/admin/login', (req, res) => {
+  return res.sendFile(path.join(__dirname, 'admin-login.html'));
+});
+
+app.post('/admin/login', requireSameOrigin, async (req, res) => {
+  return authenticateCredentials(req, res, {
+    requiredRole: 'admin',
+    redirect: safeAdminNext(req.body?.next)
+  });
+});
+
+// Las rutas visuales llevan al login; API y eventos conservan respuestas 401/403.
+app.use('/admin', redirectAdminShellToLogin);
+// Toda ruta /admin restante, incluida la página HTML, exige una sesión administrativa.
+app.use('/admin', requireAdmin);
+app.use('/admin', requireSameOrigin, requireAdminCsrf);
+
 const publicRestaurantStatusHandler = createPublicRestaurantStatusHandler({ pool });
 
+app.options('/public/restaurants/:webhookToken/status', publicCors);
 app.get(
   '/public/restaurants/:webhookToken/status',
+  publicCors,
   publicRestaurantStatusHandler
 );
 
 app.get('/session', requireSessionRestaurant, (req, res) => {
+  if (
+    String(req.session.rol || '').toLowerCase() === 'admin' &&
+    !req.session.csrf_token
+  ) {
+    req.session.csrf_token = crypto.randomBytes(32).toString('base64url');
+  }
+
   res.json({
     authenticated: true,
     user: {
@@ -194,11 +245,14 @@ app.get('/session', requireSessionRestaurant, (req, res) => {
       email: req.session.email,
       rol: req.session.rol,
       restaurante_id: getSessionRestaurantId(req)
-    }
+    },
+    csrf_token: String(req.session.rol || '').toLowerCase() === 'admin'
+      ? req.session.csrf_token
+      : undefined
   });
 });
 
-app.post('/logout', async (req, res) => {
+app.post('/logout', requireSameOrigin, async (req, res) => {
   try {
     await destroySession(req);
 
@@ -1174,8 +1228,7 @@ app.get('/pedidos-db', requireSessionRestaurant, async (req, res) => {
     res.status(500).send(error.message); // 👈 IMPORTANTE
   }
 });
-//LOGIN
-app.post('/login', async (req, res) => {
+async function authenticateCredentials(req, res, { requiredRole = null, redirect = null } = {}) {
   const email = String(req.body?.email || '').trim();
   const password = typeof req.body?.password === 'string'
     ? req.body.password
@@ -1188,11 +1241,21 @@ app.post('/login', async (req, res) => {
     });
   }
 
+  const limit = loginAttemptLimiter.check(req, email);
+  if (!limit.allowed) {
+    res.setHeader('Retry-After', String(limit.retryAfterSeconds));
+    return res.status(429).json({
+      success: false,
+      message: 'Demasiados intentos. Espera unos minutos antes de volver a intentar.'
+    });
+  }
+
   try {
     const result = await pool.query(
       `SELECT
          u.id,
          u.email,
+         u.password,
          u.rol,
          u.restaurante_id,
          r.id AS restaurante_existente,
@@ -1200,19 +1263,32 @@ app.post('/login', async (req, res) => {
        FROM usuarios u
        LEFT JOIN restaurantes r ON r.id = u.restaurante_id
        WHERE u.email = $1
-         AND u.password = $2
        LIMIT 1`,
-      [email, password]
+      [email]
     );
 
-    if (!result.rows.length) {
+    const user = result.rows[0];
+    const passwordIsValid = user
+      ? await verifyPassword(password, user.password)
+      : false;
+
+    if (!user || !passwordIsValid) {
+      loginAttemptLimiter.fail(req, email);
       return res.status(401).json({
         success: false,
         message: 'Correo o contraseña incorrectos'
       });
     }
 
-    const user = result.rows[0];
+    const role = String(user.rol || 'cliente').toLowerCase();
+    if (requiredRole && role !== requiredRole) {
+      loginAttemptLimiter.fail(req, email);
+      return res.status(403).json({
+        success: false,
+        message: 'Esta cuenta no tiene acceso administrativo'
+      });
+    }
+
     const restauranteId = Number(user.restaurante_id);
 
     if (
@@ -1233,21 +1309,40 @@ app.post('/login', async (req, res) => {
       });
     }
 
+    // Compatibilidad segura: una contraseña heredada se convierte a scrypt
+    // después de validarse correctamente, sin bloquear al usuario existente.
+    if (!isPasswordHash(user.password)) {
+      const upgradedPassword = await hashPassword(password);
+      await pool.query(
+        `UPDATE usuarios
+         SET password = $1
+         WHERE id = $2
+           AND password = $3`,
+        [upgradedPassword, user.id, user.password]
+      );
+    }
+
     await regenerateSession(req);
 
     req.session.user_id = Number(user.id);
     req.session.email = user.email;
-    req.session.rol = user.rol || 'cliente';
+    req.session.rol = role;
     req.session.restaurante_id = restauranteId;
+    req.session.csrf_token = crypto.randomBytes(32).toString('base64url');
+    if (role === 'admin') {
+      req.session.cookie.maxAge = ADMIN_SESSION_MAX_AGE_MS;
+    }
 
     await saveSession(req);
+    loginAttemptLimiter.clear(req, email);
 
     console.log('LOGIN:', user.email, 'ROL:', req.session.rol);
 
     return res.json({
       success: true,
       rol: req.session.rol,
-      restaurante_id: restauranteId
+      restaurante_id: restauranteId,
+      redirect: redirect || (role === 'admin' ? '/admin' : null)
     });
 
   } catch (error) {
@@ -1257,6 +1352,11 @@ app.post('/login', async (req, res) => {
       message: 'Error iniciando sesión'
     });
   }
+}
+
+// LOGIN GENERAL
+app.post('/login', requireSameOrigin, async (req, res) => {
+  return authenticateCredentials(req, res);
 });
 
 app.get('/admin', (req, res) => {
@@ -1860,10 +1960,12 @@ app.post('/admin/usuarios', async (req, res) => {
       });
     }
 
+    const passwordHash = await hashPassword(cleanPassword);
+
     await pool.query(
       `INSERT INTO usuarios (email, password, restaurante_id)
        VALUES ($1, $2, $3)`,
-      [cleanEmail, cleanPassword, restauranteId]
+      [cleanEmail, passwordHash, restauranteId]
     );
 
     res.status(201).json({ success: true });

@@ -15,6 +15,7 @@ const orderIntegritySource = fs.readFileSync(
   'utf8'
 );
 const adminSource = fs.readFileSync(path.join(root, 'admin.html'), 'utf8');
+const adminJsSource = fs.readFileSync(path.join(root, 'admin.js'), 'utf8');
 const preflight = fs.readFileSync(
   path.join(root, 'migrations', '002_multitenant_operations_preflight.sql'),
   'utf8'
@@ -113,8 +114,8 @@ test('admin edita configuración, genera secretos y nunca devuelve secretos comp
   assert.match(indexSource, /webhook_token: maskSecret\(restaurant\.webhook_token\)/);
   assert.match(indexSource, /woo_webhook_secret: maskSecret\(restaurant\.woo_webhook_secret\)/);
   assert.match(indexSource, /shipday_webhook_secret: maskSecret\(restaurant\.shipday_webhook_secret\)/);
-  assert.match(adminSource, /editarRestaurante/);
-  assert.match(adminSource, /generarSecretos/);
+  assert.match(adminJsSource, /editarRestaurante/);
+  assert.match(adminJsSource, /generarSecretos/);
 });
 
 test('Stripe protege administración por sesión y conserva rutas financieras', () => {
