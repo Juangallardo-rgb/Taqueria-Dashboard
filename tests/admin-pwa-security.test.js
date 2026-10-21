@@ -20,6 +20,9 @@ test('admin tiene login público antes de la protección general por rol', () =>
   assert.ok(adminGuard > loginRoute);
   assert.match(indexSource, /app\.post\('\/admin\/login', requireSameOrigin/);
   assert.match(indexSource, /requiredRole: 'admin'/);
+  assert.match(indexSource, /redirect: safeAdminNext\(req\.body\?\.next\)/);
+  assert.match(indexSource, /redirect: redirect \|\| null/);
+  assert.doesNotMatch(indexSource, /redirect: redirect \|\| \(role === 'admin' \? '\/admin'/);
   assert.match(indexSource, /redirectAdminShellToLogin/);
 });
 

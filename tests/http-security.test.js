@@ -71,10 +71,14 @@ test('CSP administrativo bloquea scripts inline sin romper el panel heredado', (
   applySecurityHeaders(request({ method: 'GET', path: '/admin/login' }), adminResponse, () => {});
   assert.match(adminResponse.headers['Content-Security-Policy'], /script-src 'self';/);
   assert.doesNotMatch(adminResponse.headers['Content-Security-Policy'], /script-src 'self' 'unsafe-inline'/);
+  assert.doesNotMatch(adminResponse.headers['Content-Security-Policy'], /cdn\.jsdelivr\.net/);
 
   const legacyResponse = response();
   applySecurityHeaders(request({ method: 'GET', path: '/' }), legacyResponse, () => {});
-  assert.match(legacyResponse.headers['Content-Security-Policy'], /script-src 'self' 'unsafe-inline'/);
+  assert.match(
+    legacyResponse.headers['Content-Security-Policy'],
+    /script-src 'self' 'unsafe-inline' https:\/\/cdn\.jsdelivr\.net/
+  );
 });
 
 test('limitador bloquea el sexto intento y se limpia tras un acceso correcto', () => {

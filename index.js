@@ -1342,7 +1342,7 @@ async function authenticateCredentials(req, res, { requiredRole = null, redirect
       success: true,
       rol: req.session.rol,
       restaurante_id: restauranteId,
-      redirect: redirect || (role === 'admin' ? '/admin' : null)
+      redirect: redirect || null
     });
 
   } catch (error) {
